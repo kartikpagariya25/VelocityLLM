@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/banner.png" alt="VelocityLLM Banner" width="100%"/>
+<img src="assets/logo.png" alt="VelocityLLM Banner" width="60%" style="border-radius: 20px;"/>
 
 <br/>
 
