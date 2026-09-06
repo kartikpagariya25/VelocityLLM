@@ -31,10 +31,10 @@ def test_adaptive_controller_multiplicative_decrease_on_memory_pressure():
     controller = AdaptiveBatchController(config)
     controller.cooldown_seconds = 0.0
 
-    # 93% memory utilization (exceeds hard limit 92%)
+    # 96% memory utilization (exceeds hard limit 94% per ServerConfig default)
     new_limit = controller.evaluate_and_tune(
         gpu_util_percent=98.0,
-        gpu_memory_used_mb=7600,
+        gpu_memory_used_mb=7900,
         gpu_memory_total_mb=8192,
         queue_depth=5,
         active_requests=8,

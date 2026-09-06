@@ -70,6 +70,7 @@ def test_admission_high_priority_tolerance():
 
     # Configure controller service time to a known baseline
     controller._ema_service_time = 0.5
+    controller._ema_token_time = 0.001
 
     # A normal request might exceed tolerance, while high priority gets 1.35x headroom
     normal_req = InferenceRequest(prompt="Normal", max_tokens=100, priority=RequestPriority.NORMAL, sla_target_ms=600.0)

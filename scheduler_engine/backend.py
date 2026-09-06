@@ -5,6 +5,10 @@ Provides swappable inference execution backends:
 2. MockBackend: High-fidelity simulation for deterministic automated testing and portable environments.
 """
 
+import os
+os.environ.setdefault("VLLM_USE_V2_MODEL_RUNNER", "0")
+os.environ.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")
+
 from abc import ABC, abstractmethod
 import asyncio
 import logging
