@@ -1,0 +1,16 @@
+{
+  "label": "Dynamic Scheduler (v3)",
+  "total_requests": 30,
+  "successful": 26,
+  "rejected_429": 4,
+  "errors": 0,
+  "wall_time_seconds": 3.206,
+  "throughput_req_per_sec": 8.11,
+  "p50_latency_seconds": 1.871,
+  "p95_latency_seconds": 2.934,
+  "p99_latency_seconds": 3.198,
+  "sla_compliance_rate_percent": 100.0,
+  "avg_gpu_util_percent": 83.4,
+  "max_gpu_util_percent": 99,
+  "avg_gpu_memory_mb": 6542
+}

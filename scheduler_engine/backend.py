@@ -9,6 +9,7 @@ import os
 os.environ.setdefault("VLLM_USE_V2_MODEL_RUNNER", "0")
 os.environ.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")
 
+import threading
 from abc import ABC, abstractmethod
 import asyncio
 import logging
@@ -73,6 +74,35 @@ class VLLMBackend(InferenceBackend):
         self.config = config
         self.engine = None
         self._sampling_params_class = None
+        self._telemetry_cache = (0, 0, 8192)
+        self._telemetry_interval = getattr(config, "gpu_sample_interval", 0.2)
+        self._telemetry_stop = threading.Event()
+        self._telemetry_thread = threading.Thread(target=self._telemetry_loop, daemon=True)
+        self._telemetry_thread.start()
+
+    def _telemetry_loop(self) -> None:
+        """Background thread: continuously refreshes GPU telemetry without ever
+        blocking the asyncio event loop (nvidia-smi subprocess calls are slow)."""
+        while not self._telemetry_stop.is_set():
+            try:
+                import subprocess
+                result = subprocess.run(
+                    [
+                        "nvidia-smi",
+                        "--query-gpu=utilization.gpu,memory.used,memory.total",
+                        "--format=csv,noheader,nounits",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=1.0,
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    parts = [p.strip() for p in result.stdout.strip().split(",")]
+                    if len(parts) >= 3:
+                        self._telemetry_cache = (int(parts[0]), int(parts[1]), int(parts[2]))
+            except Exception:
+                pass
+            self._telemetry_stop.wait(self._telemetry_interval)
 
     async def initialize(self) -> None:
         try:
@@ -141,28 +171,11 @@ class VLLMBackend(InferenceBackend):
 
     async def shutdown(self) -> None:
         logger.info("Shutting down VLLMBackend.")
+        self._telemetry_stop.set()
         self.engine = None
 
     def get_gpu_telemetry(self) -> Tuple[int, int, int]:
-        try:
-            import subprocess
-            result = subprocess.run(
-                [
-                    "nvidia-smi",
-                    "--query-gpu=utilization.gpu,memory.used,memory.total",
-                    "--format=csv,noheader,nounits",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=1.0,
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                parts = [p.strip() for p in result.stdout.strip().split(",")]
-                if len(parts) >= 3:
-                    return int(parts[0]), int(parts[1]), int(parts[2])
-        except Exception:
-            pass
-        return 0, 0, 8192
+        return self._telemetry_cache
 
 
 class MockBackend(InferenceBackend):

@@ -1,0 +1,16 @@
+{
+  "label": "Dynamic Scheduler (Fixed)",
+  "total_requests": 30,
+  "successful": 27,
+  "rejected_429": 3,
+  "errors": 0,
+  "wall_time_seconds": 6.173,
+  "throughput_req_per_sec": 4.37,
+  "p50_latency_seconds": 3.499,
+  "p95_latency_seconds": 6.039,
+  "p99_latency_seconds": 6.162,
+  "sla_compliance_rate_percent": 100.0,
+  "avg_gpu_util_percent": 89.3,
+  "max_gpu_util_percent": 99,
+  "avg_gpu_memory_mb": 6542
+}
