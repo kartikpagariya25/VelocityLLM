@@ -1,0 +1,19 @@
+{
+  "label": "Dynamic - Poisson Traffic",
+  "pattern": "poisson",
+  "total_requests": 40,
+  "successful": 40,
+  "rejected_429": 0,
+  "errors": 0,
+  "wall_time_seconds": 9.758,
+  "throughput_req_per_sec": 4.1,
+  "p50_latency_seconds": 0.531,
+  "p95_latency_seconds": 0.813,
+  "p99_latency_seconds": 0.829,
+  "sla_compliance_rate_percent": 100.0,
+  "long_prompt_p99_seconds": null,
+  "short_prompt_p99_seconds": 0.829,
+  "avg_gpu_util_percent": 80.5,
+  "max_gpu_util_percent": 99,
+  "avg_gpu_memory_mb": 6542
+}

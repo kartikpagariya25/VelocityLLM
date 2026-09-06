@@ -1,0 +1,19 @@
+{
+  "label": "Static - Mixed Prompts (E10)",
+  "pattern": "flood",
+  "total_requests": 30,
+  "successful": 30,
+  "rejected_429": 0,
+  "errors": 0,
+  "wall_time_seconds": 5.853,
+  "throughput_req_per_sec": 5.13,
+  "p50_latency_seconds": 0.964,
+  "p95_latency_seconds": 5.497,
+  "p99_latency_seconds": 5.503,
+  "sla_compliance_rate_percent": 80.0,
+  "long_prompt_p99_seconds": 5.503,
+  "short_prompt_p99_seconds": 1.373,
+  "avg_gpu_util_percent": 94.8,
+  "max_gpu_util_percent": 99,
+  "avg_gpu_memory_mb": 6542
+}
