@@ -12,10 +12,10 @@ aiohttp
 # Hugging Face model download and auth
 huggingface_hub
 
-# --- Phase 3 (Robustness & Testing) — install when reached ---
-# pytest
-# pytest-asyncio
-# httpx
+# --- Testing & Quality Assurance ---
+pytest
+pytest-asyncio
+httpx
 
 # --- Phase 4 (Metrics/Observability) — install when reached ---
 # prometheus_client

@@ -222,7 +222,20 @@ You should see a generated response printed at the end (e.g., "The capital of Fr
 
 ## Usage
 
-### Run the Baseline Server
+### Run the Dynamic Scheduler Server (Production / Phase 2)
+
+```bash
+# Run Dynamic Continuous Batching Server (Default)
+python3 -m scheduler_engine.server --policy dynamic --port 8000
+
+# Run in Mock mode (for testing or development without a GPU)
+python3 -m scheduler_engine.server --policy dynamic --mock --port 8000
+
+# Or run Static Baseline Policy on the unified server
+python3 -m scheduler_engine.server --policy static --port 8000
+```
+
+### Run the Legacy Baseline Server (Phase 1 Reference)
 
 ```bash
 uvicorn scheduler_engine.baseline_server:app --host 0.0.0.0 --port 8000
@@ -231,34 +244,73 @@ uvicorn scheduler_engine.baseline_server:app --host 0.0.0.0 --port 8000
 ### Send a Test Request (in a separate terminal)
 
 ```bash
+# VelocityLLM Native Generation Endpoint
 curl -X POST http://localhost:8000/generate \
   -H "Content-Type: application/json" \
-  -d '{"prompt": "What is the capital of France?", "max_tokens": 50}'
+  -d '{"prompt": "Explain dynamic continuous batching.", "max_tokens": 60, "priority": 1}'
+
+# OpenAI-Compatible Completions Endpoint
+curl -X POST http://localhost:8000/v1/completions \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "What is the speed of light?", "max_tokens": 50, "priority": "high"}'
 ```
 
-### Run a Load Test with Live GPU Monitoring
+### Check Scheduler Telemetry & Prometheus Metrics
+
+```bash
+# Real-time scheduler internal stats
+curl http://localhost:8000/stats
+
+# Prometheus scraper metrics
+curl http://localhost:8000/metrics
+```
+
+### Run the Phase 2 Verification Suite
+
+```bash
+python3 verify_phase2.py
+```
+
+### Run Automated Unit & Integration Tests
+
+```bash
+pytest tests/ -v
+# or
+python3 run_tests.py
+```
+
+### Run a Load Test with Live GPU Monitoring & Priority Traffic
 
 ```bash
 python3 load_generator/generate_load.py \
-  --num-requests 20 \
-  --concurrency 5 \
-  --max-tokens 50 \
+  --num-requests 30 \
+  --concurrency 8 \
+  --max-tokens 100 \
+  --priority mixed \
+  --mixed-tokens \
   --output results.csv
 ```
 
 This prints a clearly highlighted summary block:
 
 ```
-==================================================
-  BENCHMARK RESULTS
-==================================================
-  Throughput          : X.XX req/sec
-  p50 latency         : X.XXXs
-  p99 latency         : X.XXXs
---------------------------------------------------
-  >>> AVG GPU UTIL     : XX.X%  <<<
-  >>> MAX GPU UTIL     : XX.X%  <<<
-==================================================
+==============================================================
+               VELOCITY-LLM BENCHMARK RESULTS
+==============================================================
+  Total Requests Submitted    : 30
+  Completed Successfully (200): 30 (100.0%)
+  Shed under SLA Policy (429) : 0 (0.0%)
+  Wall Elapsed Time           : 4.12s
+--------------------------------------------------------------
+  LATENCY & THROUGHPUT (SUCCESSFUL REQUESTS)
+--------------------------------------------------------------
+  Request Throughput          : 7.28 req/sec
+  Token Throughput            : 364.00 tokens/sec
+  p50 Latency                 : 1.250s
+  p95 Latency                 : 1.840s
+  p99 Latency                 : 2.110s
+  SLA Compliance Rate         : 100.0%
+==============================================================
 ```
 
 ### Watch GPU Usage Live (Separate Terminal, Optional)
@@ -318,7 +370,7 @@ Full logs and methodology: [`docs/baseline_results_summary.md`](docs/baseline_re
 
 - [x] **Phase 0** — Environment, GPU/CUDA/vLLM verified end-to-end
 - [x] **Phase 1** — Baseline static-batching server, load generator, GPU monitoring
-- [ ] **Phase 2** — Core dynamic scheduler: SLA-aware admission control, adaptive batch sizing, priority + aging
+- [x] **Phase 2** — Core dynamic scheduler: SLA-aware admission control, adaptive batch sizing, priority + aging, swappable policy architecture
 - [ ] **Phase 3** — Robustness: input validation, OOM protection, structured logging, full test suite
 - [ ] **Phase 4** — Advanced load generation (bursty/Poisson traffic) and full comparative benchmarking
 - [ ] **Phase 5** — Live Streamlit dashboard with static-vs-dynamic comparison view
