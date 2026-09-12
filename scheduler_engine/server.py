@@ -125,6 +125,21 @@ app = FastAPI(
 
 
 @app.middleware("http")
+async def api_key_auth_middleware(request: Request, call_next):
+    cfg = get_config()
+    if cfg and cfg.api_key:
+        if request.url.path in ("/health", "/docs", "/openapi.json"):
+            return await call_next(request)
+        provided_key = request.headers.get("X-API-Key")
+        if provided_key != cfg.api_key:
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={"detail": "Invalid or missing API key"},
+            )
+    return await call_next(request)
+
+
+@app.middleware("http")
 async def correlation_id_middleware(request: Request, call_next):
     """
     Extracts or generates correlation ID for every HTTP transaction.
@@ -423,6 +438,12 @@ def main():
         default="/home/kartiklin/velocityllm/models/llama-3.2-1b",
         help="Path or HuggingFace identifier for LLM weights",
     )
+    parser.add_argument(
+        "--api-key",
+        type=str,
+        default=None,
+        help="If set, requires this value in the X-API-Key header for all requests except /health",
+    )
     parser.add_argument("--host", default="0.0.0.0", help="Host address to bind")
     parser.add_argument("--port", type=int, default=8000, help="Port to listen on")
     parser.add_argument(
@@ -481,6 +502,7 @@ def main():
         max_model_len=args.max_model_len,
         burst_shed_queue_ratio=args.burst_shed_ratio,
         enable_structured_logging=args.structured_logs,
+        api_key=args.api_key,
     )
     set_config(cfg)
 

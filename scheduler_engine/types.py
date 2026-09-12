@@ -245,6 +245,9 @@ class ServerConfig:
 
     # Phase 3 Robustness additions
     enable_structured_logging: bool = False
+
+    # Phase A - API Key Authentication (optional; None disables auth entirely)
+    api_key: Optional[str] = None
     burst_shed_queue_ratio: float = 0.70    # Start shedding LOW priority at 70% queue depth
     soft_memory_limit_ratio: float = 0.88   # Soft memory throttle threshold
     hard_memory_limit_ratio: float = 0.94   # Hard memory preemption threshold
