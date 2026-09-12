@@ -1,0 +1,128 @@
+.team {
+  position: relative;
+  background: linear-gradient(0deg, var(--color-bg-deep), rgba(255, 122, 0, 0.02), var(--color-bg-deep));
+}
+
+.team__header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: var(--space-4xl);
+}
+
+.team__header .section-label {
+  justify-content: center;
+}
+
+.team__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-xl);
+}
+
+.team__card {
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-md);
+}
+
+.team__photo-wrapper {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  overflow: hidden;
+  position: relative;
+  border: 2px solid var(--color-border);
+  padding: 4px;
+  background: var(--color-bg-deep);
+  transition: all var(--transition-smooth);
+}
+
+.team__card:hover .team__photo-wrapper {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 20px rgba(255, 122, 0, 0.3);
+  transform: scale(1.05);
+}
+
+.team__photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  filter: grayscale(80%) contrast(1.1);
+  transition: filter var(--transition-smooth);
+}
+
+.team__card:hover .team__photo {
+  filter: grayscale(0%) contrast(1);
+}
+
+.team__photo-overlay {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, transparent 40%, rgba(255, 122, 0, 0.2) 100%);
+  opacity: 0;
+  transition: opacity var(--transition-base);
+  border-radius: 50%;
+}
+
+.team__card:hover .team__photo-overlay {
+  opacity: 1;
+}
+
+.team__info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-grow: 1;
+}
+
+.team__name {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: var(--color-text);
+}
+
+.team__role {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+  flex-grow: 1;
+}
+
+.team__links {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-md);
+  margin-top: var(--space-sm);
+}
+
+.team__link {
+  color: var(--color-text-dim);
+  transition: all var(--transition-fast);
+}
+
+.team__link:hover {
+  color: var(--color-primary);
+  transform: translateY(-2px);
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .team__grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .team__grid {
+    grid-template-columns: 1fr;
+    max-width: 320px;
+    margin: 0 auto;
+  }
+}

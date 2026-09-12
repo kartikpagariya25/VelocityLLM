@@ -1,0 +1,19 @@
+{
+  "label": "Qwen - Dynamic Mixed Prompts",
+  "pattern": "flood",
+  "total_requests": 30,
+  "successful": 25,
+  "rejected_429": 5,
+  "errors": 0,
+  "wall_time_seconds": 5.68,
+  "throughput_req_per_sec": 4.4,
+  "p50_latency_seconds": 0.993,
+  "p95_latency_seconds": 4.297,
+  "p99_latency_seconds": 5.639,
+  "sla_compliance_rate_percent": 100.0,
+  "long_prompt_p99_seconds": 5.639,
+  "short_prompt_p99_seconds": 1.683,
+  "avg_gpu_util_percent": 94.7,
+  "max_gpu_util_percent": 100,
+  "avg_gpu_memory_mb": 6929
+}

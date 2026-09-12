@@ -426,6 +426,12 @@ def main():
         help="Maximum concurrency ceiling for adaptive controller",
     )
     parser.add_argument(
+        "--max-model-len",
+        type=int,
+        default=4096,
+        help="Maximum model context length (must not exceed the model's own max_position_embeddings)",
+    )
+    parser.add_argument(
         "--burst-shed-ratio",
         type=float,
         default=0.70,
@@ -446,6 +452,7 @@ def main():
         port=args.port,
         target_sla_ms=args.sla_ms,
         max_concurrency=args.max_concurrency,
+        max_model_len=args.max_model_len,
         burst_shed_queue_ratio=args.burst_shed_ratio,
         enable_structured_logging=args.structured_logs,
     )

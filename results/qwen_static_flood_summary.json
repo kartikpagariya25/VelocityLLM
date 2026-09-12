@@ -1,0 +1,19 @@
+{
+  "label": "Qwen - Static Baseline",
+  "pattern": "flood",
+  "total_requests": 30,
+  "successful": 30,
+  "rejected_429": 0,
+  "errors": 0,
+  "wall_time_seconds": 29.481,
+  "throughput_req_per_sec": 1.02,
+  "p50_latency_seconds": 1.81,
+  "p95_latency_seconds": 25.998,
+  "p99_latency_seconds": 25.998,
+  "sla_compliance_rate_percent": 66.7,
+  "long_prompt_p99_seconds": null,
+  "short_prompt_p99_seconds": 25.998,
+  "avg_gpu_util_percent": 16.3,
+  "max_gpu_util_percent": 99,
+  "avg_gpu_memory_mb": 5896
+}

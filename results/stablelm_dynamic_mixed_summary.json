@@ -1,0 +1,19 @@
+{
+  "label": "StableLM-2 - Dynamic Mixed Prompts",
+  "pattern": "flood",
+  "total_requests": 30,
+  "successful": 24,
+  "rejected_429": 6,
+  "errors": 0,
+  "wall_time_seconds": 5.412,
+  "throughput_req_per_sec": 4.43,
+  "p50_latency_seconds": 0.892,
+  "p95_latency_seconds": 4.227,
+  "p99_latency_seconds": 5.374,
+  "sla_compliance_rate_percent": 100.0,
+  "long_prompt_p99_seconds": 5.374,
+  "short_prompt_p99_seconds": 1.407,
+  "avg_gpu_util_percent": 87.4,
+  "max_gpu_util_percent": 99,
+  "avg_gpu_memory_mb": 6534
+}

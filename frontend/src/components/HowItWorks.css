@@ -1,0 +1,120 @@
+.how-it-works {
+  position: relative;
+  background: linear-gradient(180deg, var(--color-bg-deep), rgba(255, 122, 0, 0.02), var(--color-bg-deep));
+}
+
+.how-it-works__header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: var(--space-4xl);
+}
+
+.how-it-works__header .section-label {
+  justify-content: center;
+}
+
+.how-it-works__timeline {
+  position: relative;
+  max-width: 700px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3xl);
+}
+
+.how-it-works__line {
+  position: absolute;
+  left: 38px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: linear-gradient(to bottom, transparent, var(--color-border) 10%, var(--color-border) 90%, transparent);
+}
+
+.how-it-works__step {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  grid-template-rows: auto auto;
+  gap: 0 var(--space-xl);
+  position: relative;
+}
+
+.how-it-works__step-number {
+  grid-column: 1;
+  grid-row: 1;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  letter-spacing: 0.1em;
+  text-align: center;
+  margin-bottom: var(--space-sm);
+}
+
+.how-it-works__step-icon {
+  grid-column: 1;
+  grid-row: 2;
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  color: var(--color-primary);
+  margin: 0 auto;
+  position: relative;
+  z-index: 1;
+}
+
+.how-it-works__step-content {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-sm);
+}
+
+.how-it-works__step-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.how-it-works__step-desc {
+  font-size: 0.95rem;
+  color: var(--color-text-muted);
+  line-height: 1.7;
+}
+
+.how-it-works__connector {
+  grid-column: 1;
+  display: flex;
+  justify-content: center;
+  padding: var(--space-sm) 0;
+  opacity: 0.3;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+  .how-it-works__timeline {
+    gap: var(--space-2xl);
+  }
+  .how-it-works__step {
+    grid-template-columns: 56px 1fr;
+    gap: 0 var(--space-md);
+  }
+  .how-it-works__step-icon {
+    width: 48px;
+    height: 48px;
+  }
+  .how-it-works__step-icon svg {
+    width: 24px;
+    height: 24px;
+  }
+  .how-it-works__line {
+    left: 28px;
+  }
+}

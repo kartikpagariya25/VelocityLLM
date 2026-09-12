@@ -1,0 +1,19 @@
+{
+  "label": "TinyLlama - Static Baseline",
+  "pattern": "flood",
+  "total_requests": 30,
+  "successful": 30,
+  "rejected_429": 0,
+  "errors": 0,
+  "wall_time_seconds": 1.63,
+  "throughput_req_per_sec": 18.41,
+  "p50_latency_seconds": 0.183,
+  "p95_latency_seconds": 1.433,
+  "p99_latency_seconds": 1.434,
+  "sla_compliance_rate_percent": 100.0,
+  "long_prompt_p99_seconds": null,
+  "short_prompt_p99_seconds": 1.434,
+  "avg_gpu_util_percent": 57.9,
+  "max_gpu_util_percent": 98,
+  "avg_gpu_memory_mb": 7794
+}

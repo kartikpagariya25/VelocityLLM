@@ -33,3 +33,21 @@ Thumbs.db
 *.swp
 
 tmp_pip/
+
+# Large raw video assets (exploratory/source files — only final optimized
+# videos go into frontend/public/ when actually integrated into the site)
+*.mp4
+*.mov
+*.avi
+
+# Node.js / Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+.env.local
+
+# Large raw video/media assets
+*.mp4
+*.mov
+*.avi

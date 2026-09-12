@@ -1,0 +1,19 @@
+{
+  "label": "StableLM-2 - Dynamic Scheduler",
+  "pattern": "flood",
+  "total_requests": 30,
+  "successful": 27,
+  "rejected_429": 3,
+  "errors": 0,
+  "wall_time_seconds": 5.236,
+  "throughput_req_per_sec": 5.16,
+  "p50_latency_seconds": 1.778,
+  "p95_latency_seconds": 1.977,
+  "p99_latency_seconds": 2.099,
+  "sla_compliance_rate_percent": 100.0,
+  "long_prompt_p99_seconds": null,
+  "short_prompt_p99_seconds": 2.099,
+  "avg_gpu_util_percent": 85.3,
+  "max_gpu_util_percent": 99,
+  "avg_gpu_memory_mb": 6533
+}

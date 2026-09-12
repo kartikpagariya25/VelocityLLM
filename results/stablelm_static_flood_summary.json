@@ -1,0 +1,19 @@
+{
+  "label": "StableLM-2 - Static Baseline",
+  "pattern": "flood",
+  "total_requests": 30,
+  "successful": 30,
+  "rejected_429": 0,
+  "errors": 0,
+  "wall_time_seconds": 5.739,
+  "throughput_req_per_sec": 5.23,
+  "p50_latency_seconds": 1.588,
+  "p95_latency_seconds": 3.105,
+  "p99_latency_seconds": 3.129,
+  "sla_compliance_rate_percent": 93.3,
+  "long_prompt_p99_seconds": null,
+  "short_prompt_p99_seconds": 3.129,
+  "avg_gpu_util_percent": 88.3,
+  "max_gpu_util_percent": 99,
+  "avg_gpu_memory_mb": 6532
+}
