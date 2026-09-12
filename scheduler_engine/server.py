@@ -5,6 +5,7 @@ with swappable static/dynamic policies and OpenAI-compatible endpoints.
 """
 
 import argparse
+import yaml
 import asyncio
 from contextlib import asynccontextmanager
 import logging
@@ -393,8 +394,24 @@ def create_app(config: Optional[ServerConfig] = None) -> FastAPI:
     return app
 
 
+def load_config_file(path):
+    with open(path, "r") as f:
+        return yaml.safe_load(f) or {}
+
+
+def load_config_file(path):
+    with open(path, "r") as f:
+        return yaml.safe_load(f) or {}
+
+
 def main():
     parser = argparse.ArgumentParser(description="VelocityLLM Dynamic Serving Engine")
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Path to a YAML config file. CLI flags override values from this file.",
+    )
     parser.add_argument(
         "--policy",
         choices=["dynamic", "static"],
@@ -443,6 +460,15 @@ def main():
         help="Format logs as structured JSON lines for production ingestion",
     )
     args = parser.parse_args()
+
+    if args.config:
+        file_defaults = load_config_file(args.config)
+        for key, value in file_defaults.items():
+            arg_key = key.replace("-", "_")
+            if hasattr(args, arg_key):
+                default_val = parser.get_default(arg_key)
+                if getattr(args, arg_key) == default_val:
+                    setattr(args, arg_key, value)
 
     cfg = ServerConfig(
         policy=args.policy,

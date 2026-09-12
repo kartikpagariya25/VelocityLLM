@@ -1,0 +1,9 @@
+# VelocityLLM Server Configuration
+# Usage: python3 -m scheduler_engine.server --config config.example.yaml
+
+policy: dynamic
+model_path: /home/kartiklin/velocityllm/models/llama-3.2-1b
+port: 8000
+sla_ms: 8000
+max_concurrency: 32
+max_model_len: 4096
