@@ -317,6 +317,7 @@ async def get_stats():
     stats = policy.get_stats()
     result = stats.to_dict()
     result["uptime_seconds"] = round(time.time() - _start_time, 2)
+    result["prefix_cache"] = policy.backend.get_prefix_cache_stats()
     return JSONResponse(content=result)
 
 

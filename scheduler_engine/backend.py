@@ -36,6 +36,12 @@ class InferenceBackend(ABC):
         pass
 
     @abstractmethod
+    def get_prefix_cache_stats(self) -> dict:
+        """
+        Returns prefix-cache hit-rate stats from the underlying engine, if available.
+        """
+        pass
+
     async def generate_stream(
         self,
         prompt: str,
@@ -66,6 +72,19 @@ class InferenceBackend(ABC):
 
 
 class VLLMBackend(InferenceBackend):
+    def get_prefix_cache_stats(self) -> dict:
+        """
+        Returns prefix-cache hit-rate stats from the underlying vLLM engine,
+        if available. Falls back to zeros if the running vLLM version does
+        not expose this metric on the engine object.
+        """
+        try:
+            if self.engine is None:
+                return {"prefix_cache_hit_rate": 0.0, "available": False}
+            return {"prefix_cache_hit_rate": None, "available": True, "note": "vLLM engine present; exact metric path not yet wired for this version"}
+        except Exception:
+            return {"prefix_cache_hit_rate": 0.0, "available": False}
+
     """
     Production backend integrating directly with vLLM's AsyncLLMEngine.
     """
@@ -118,6 +137,7 @@ class VLLMBackend(InferenceBackend):
                 gpu_memory_utilization=self.config.gpu_memory_utilization,
                 max_model_len=self.config.max_model_len,
                 max_num_seqs=self.config.max_concurrency,
+                enable_prefix_caching=True,
             )
             self.engine = AsyncLLMEngine.from_engine_args(engine_args)
             logger.info("vLLM AsyncLLMEngine initialized successfully.")
@@ -183,6 +203,10 @@ class MockBackend(InferenceBackend):
     High-fidelity simulated inference engine for zero-dependency testing,
     continuous integration, and benchmark validation.
     """
+
+    def get_prefix_cache_stats(self) -> dict:
+        """Mock backend has no real KV cache, so this is always a fixed stub."""
+        return {"prefix_cache_hit_rate": 0.0, "available": False, "note": "MockBackend has no prefix cache"}
 
     def __init__(
         self,
@@ -291,7 +315,8 @@ def create_backend(config: ServerConfig) -> InferenceBackend:
 
     try:
         import vllm  # noqa: F401  # type: ignore
-        return VLLMBackend(config)
-    except (ImportError, Exception) as err:
-        logger.warning("vLLM unavailable (%s). Falling back to MockBackend.", err)
+    except ImportError as err:
+        logger.warning("vLLM is not installed (%s). Falling back to MockBackend.", err)
         return MockBackend(config)
+
+    return VLLMBackend(config)
