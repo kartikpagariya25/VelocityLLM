@@ -308,6 +308,47 @@ async def v1_completions(req: CompletionRequest, request: Request):
         )
 
 
+@app.post("/generate/stream")
+async def generate_stream(req: InferenceRequest, request: Request):
+    """
+    Streaming variant of /generate. Sends each generated token as a
+    Server-Sent Event as soon as it is produced, instead of waiting
+    for the full response.
+    """
+    policy = get_policy()
+    corr_id = getattr(request.state, "correlation_id", req.request_id or f"req-{uuid.uuid4().hex[:12]}")
+    req.request_id = corr_id
+
+    async def event_generator():
+        try:
+            async for chunk in policy.schedule_stream(req):
+                payload = chunk.model_dump_json()
+                yield f"data: {payload}\n\n"
+                if chunk.is_finished:
+                    break
+        except AdmissionRejectedException as e:
+            error_payload = {
+                "error": "Rate limit / SLA protection shed",
+                "correlation_id": corr_id,
+                "reason": e.reason,
+                "retry_after_seconds": e.retry_after,
+            }
+            yield f"data: {error_payload}\n\n"
+        except GPUOutOfMemoryError as e:
+            error_payload = {
+                "error": "GPU Out of Memory",
+                "correlation_id": corr_id,
+                "reason": str(e),
+            }
+            yield f"data: {error_payload}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"X-Correlation-ID": corr_id},
+    )
+
+
 @app.get("/stats")
 async def get_stats():
     """

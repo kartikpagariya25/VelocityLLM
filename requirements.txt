@@ -23,3 +23,4 @@ httpx
 # --- Phase 5 (Dashboard) — install when reached ---
 # streamlit
 # pandas
+requests
