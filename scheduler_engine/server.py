@@ -139,6 +139,19 @@ async def api_key_auth_middleware(request: Request, call_next):
     return await call_next(request)
 
 
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """
+    Global safety net: converts any unexpected exception into a clean
+    400/500 JSON response instead of leaking a raw traceback to the client.
+    """
+    logger.error("Unhandled exception on %s: %s", request.url.path, exc, exc_info=True)
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={"detail": "Malformed or invalid request."},
+    )
+
+
 @app.middleware("http")
 async def correlation_id_middleware(request: Request, call_next):
     """
