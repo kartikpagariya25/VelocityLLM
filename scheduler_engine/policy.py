@@ -350,7 +350,7 @@ class DynamicBatchPolicy(SchedulerPolicy):
                 self.queue_times.pop(0)
 
             # Update admission controller service-time estimate
-            self.admission_controller.update_completion_stats(total_latency, token_count)
+            self.admission_controller.update_completion_stats(exec_time, token_count)
 
             tps = (token_count / exec_time) if exec_time > 0 else 0.0
 

@@ -200,10 +200,13 @@ def main():
     p.add_argument("--max-model-len", type=int, default=4096)
     p.add_argument("--settle", type=float, default=5.0)
     p.add_argument("--startup-timeout", type=float, default=600.0)
+    p.add_argument("--out-name", default="fair")
     p.add_argument("--mock", action="store_true")
     p.add_argument("--report-only", action="store_true")
     args = p.parse_args()
 
+    global OUT_DIR
+    OUT_DIR = ROOT / "results" / args.out_name
     models = parse_models(args.model)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     if not args.report_only:
