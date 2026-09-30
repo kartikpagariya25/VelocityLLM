@@ -1,42 +1,28 @@
-import { motion } from 'framer-motion';
-import './ModelStrip.css';
-
-const models = [
-  'TinyLlama-1.1B',
-  'Llama-3.2-1B-Instruct',
-  'StableLM-2-1.6B',
-  'Qwen2.5-1.5B-Instruct',
-];
+import { MODELS } from '../data/content'
+import { useReveal } from '../lib/motion'
+import './ModelStrip.css'
 
 export default function ModelStrip() {
+  const root = useReveal()
   return (
-    <div className="model-strip">
-      <div className="model-strip__container">
-        <div className="model-strip__label">
-          Model Agnostic
-          <span className="model-strip__label-arrow">→</span>
+    <section className="models section" ref={root}>
+      <div className="wrap models__inner">
+        <div>
+          <p className="kicker" data-reveal>Model-agnostic</p>
+          <h2 className="h2" data-lines>Swap the model. Keep the scheduler.</h2>
+          <p className="lede" data-reveal>
+            The scheduler only reads request metadata: arrival time, prompt length, priority and deadline. It never touches weights, tokenizers or logits, so changing the model is a config change. Tested on an RTX 5050 with 8 GB of memory.
+          </p>
         </div>
-        <div className="model-strip__track-wrapper">
-          <motion.div
-            className="model-strip__track"
-            animate={{
-              x: ['0%', '-50%'],
-            }}
-            transition={{
-              repeat: Infinity,
-              ease: 'linear',
-              duration: 20,
-            }}
-          >
-            {/* Double the array for seamless infinite scrolling */}
-            {[...models, ...models].map((model, i) => (
-              <div key={i} className="model-strip__item">
-                {model}
-              </div>
-            ))}
-          </motion.div>
-        </div>
+        <ul className="models__list">
+          {MODELS.map((m) => (
+            <li key={m.id} data-reveal>
+              <b>{m.name}</b>
+              <span className="mono">{m.size} parameters</span>
+            </li>
+          ))}
+        </ul>
       </div>
-    </div>
-  );
+    </section>
+  )
 }

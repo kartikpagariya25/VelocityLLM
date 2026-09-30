@@ -1,105 +1,95 @@
-import { motion } from 'framer-motion';
-import SectionWrapper, { MotionDiv } from './SectionWrapper';
-import './Problem.css';
+import { useRef } from 'react'
+import { gsap, useGSAP, prefersReducedMotion } from '../lib/motion'
+import './Problem.css'
+
+const BEATS = [
+  ['Traffic is never steady.', 'Real users arrive in waves. A batch size picked in advance is right for one moment and wrong for the next.'],
+  ['A fixed batch cannot bend.', 'Static batching serves a set number at a time and lets the rest queue. Latency climbs and deadlines slip.'],
+  ['Then the GPU runs out of room.', 'Nothing tells the scheduler to stop. Memory fills, requests fail and the whole server goes down with them.'],
+]
+
+const DOTS = Array.from({ length: 28 }, (_, i) => i)
+const SLOTS = Array.from({ length: 8 }, (_, i) => i)
 
 export default function Problem() {
+  const root = useRef(null)
+  const still = useRef(prefersReducedMotion())
+
+  useGSAP(
+    () => {
+      if (still.current) return
+      const count = { v: 0 }
+      const label = root.current.querySelector('.ps__count')
+      const tl = gsap.timeline({
+        defaults: { ease: 'none' },
+        scrollTrigger: { trigger: root.current, start: 'top top', end: 'bottom bottom', scrub: 0.6 },
+      })
+      gsap.set('.beat', { opacity: 0, y: 24 })
+      gsap.set('.beat:first-child', { opacity: 1, y: 0 })
+      gsap.set('.ps__dot', { opacity: 0, scale: 0.4 })
+      gsap.set('.ps__slot', { opacity: 0.25 })
+      tl.to('.ps__slot', { opacity: 1, stagger: 0.1, duration: 0.6 }, 0)
+        .to('.ps__dot:nth-child(-n+5)', { opacity: 1, scale: 1, stagger: 0.12, duration: 0.3 }, 0.3)
+        .to('.ps__fill', { scaleX: 0.42, duration: 1 }, 0)
+        .to('.beat:nth-child(1)', { opacity: 0, y: -24, duration: 0.3 }, 0.95)
+        .to('.beat:nth-child(2)', { opacity: 1, y: 0, duration: 0.4 }, 1.05)
+        .to('.ps__dot:nth-child(n+6)', { opacity: 1, scale: 1, stagger: 0.03, duration: 0.25 }, 1.05)
+        .to(count, { v: DOTS.length, duration: 0.9, onUpdate: () => (label.textContent = Math.round(count.v)) }, 1.05)
+        .to('.ps__fill', { scaleX: 0.78, duration: 1 }, 1)
+        .to('.beat:nth-child(2)', { opacity: 0, y: -24, duration: 0.3 }, 1.95)
+        .to('.beat:nth-child(3)', { opacity: 1, y: 0, duration: 0.4 }, 2.05)
+        .to('.ps__fill', { scaleX: 1, backgroundColor: '#d92d20', duration: 0.6 }, 2)
+        .to('.ps__dot', { backgroundColor: '#d92d20', duration: 0.4 }, 2.1)
+        .to('.ps__stamp', { opacity: 1, scale: 1, duration: 0.3, ease: 'power3.out' }, 2.45)
+        .to('.ps', { x: 3, duration: 0.04, repeat: 5, yoyo: true }, 2.5)
+        .to({}, { duration: 0.4 }, 2.6)
+    },
+    { scope: root },
+  )
+
   return (
-    <SectionWrapper id="problem" className="problem">
-      <div className="container">
-        <div className="problem__layout">
-          <div className="problem__visual">
-            <MotionDiv className="problem__gpu-grid">
-              {/* Static side - underutilized */}
-              <div className="problem__gpu-half problem__gpu-half--static">
-                <div className="problem__gpu-label">Static Batching</div>
-                <div className="problem__cores">
-                  {[...Array(16)].map((_, i) => (
-                    <div
-                      key={i}
-                      className={`problem__core ${i < 4 ? 'problem__core--active' : 'problem__core--idle'}`}
-                    />
-                  ))}
-                </div>
-                <div className="problem__utilization">
-                  <div className="problem__util-bar">
-                    <motion.div
-                      className="problem__util-fill problem__util-fill--low"
-                      initial={{ width: 0 }}
-                      whileInView={{ width: '25%' }}
-                      viewport={{ once: true }}
-                      transition={{ duration: 1.2, delay: 0.5, ease: [0.16, 1, 0.3, 1] }}
-                    />
-                  </div>
-                  <span className="problem__util-label">~25% GPU Utilization</span>
-                </div>
+    <section className={`problem ${still.current ? 'problem--still' : ''}`} id="problem" ref={root}>
+      <div className="problem__sticky wrap">
+        <div className="problem__copy">
+          <p className="kicker">The problem</p>
+          <div className="problem__beats">
+            {BEATS.map(([title, text]) => (
+              <div className="beat" key={title}>
+                <h2 className="h2">{title}</h2>
+                <p className="lede">{text}</p>
               </div>
-
-              {/* Arrow */}
-              <div className="problem__arrow">
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" strokeWidth="2">
-                  <path d="M5 12h14M12 5l7 7-7 7" />
-                </svg>
-              </div>
-
-              {/* Dynamic side - fully utilized */}
-              <div className="problem__gpu-half problem__gpu-half--dynamic">
-                <div className="problem__gpu-label problem__gpu-label--glow">Dynamic Batching</div>
-                <div className="problem__cores">
-                  {[...Array(16)].map((_, i) => (
-                    <div
-                      key={i}
-                      className="problem__core problem__core--active problem__core--glow"
-                      style={{ animationDelay: `${i * 0.1}s` }}
-                    />
-                  ))}
-                </div>
-                <div className="problem__utilization">
-                  <div className="problem__util-bar">
-                    <motion.div
-                      className="problem__util-fill problem__util-fill--high"
-                      initial={{ width: 0 }}
-                      whileInView={{ width: '95%' }}
-                      viewport={{ once: true }}
-                      transition={{ duration: 1.5, delay: 0.8, ease: [0.16, 1, 0.3, 1] }}
-                    />
-                  </div>
-                  <span className="problem__util-label">~95% GPU Utilization</span>
-                </div>
-              </div>
-            </MotionDiv>
-          </div>
-
-          <div className="problem__content">
-            <MotionDiv>
-              <div className="section-label">The Problem</div>
-            </MotionDiv>
-            <MotionDiv>
-              <h2 className="section-title">
-                Static batching<br />
-                <span className="gradient-text">wastes your GPU.</span>
-              </h2>
-            </MotionDiv>
-            <MotionDiv>
-              <p className="problem__desc">
-                Traditional LLM serving uses fixed batch sizes that under-utilize GPU throughput
-                under variable request loads — and silently breaks latency promises when traffic spikes.
-              </p>
-            </MotionDiv>
-            <MotionDiv>
-              <div className="problem__callout glass-card">
-                <div className="problem__callout-icon">⚠️</div>
-                <div>
-                  <div className="problem__callout-title">The Silent Failure</div>
-                  <p className="problem__callout-text">
-                    Static batching silently breaks its latency promise on up to
-                    <strong> 1 in 3 requests</strong> — with no warning to the caller.
-                  </p>
-                </div>
-              </div>
-            </MotionDiv>
+            ))}
           </div>
         </div>
+        <div className="ps" role="img" aria-label="Illustration: a static scheduler with eight slots, a growing queue and a full memory bar">
+          <div className="ps__head">
+            <span>Static scheduler</span>
+            <span className="mono">batch size 8</span>
+          </div>
+          <div className="ps__slots">
+            {SLOTS.map((s) => (
+              <i className="ps__slot" key={s} />
+            ))}
+          </div>
+          <div className="ps__row">
+            <span>Waiting</span>
+            <b className="ps__count mono">{still.current ? DOTS.length : 0}</b>
+          </div>
+          <div className="ps__queue">
+            {DOTS.map((d) => (
+              <i className="ps__dot" key={d} />
+            ))}
+          </div>
+          <div className="ps__row">
+            <span>GPU memory</span>
+          </div>
+          <div className="ps__meter">
+            <div className="ps__fill" />
+          </div>
+          <div className="ps__stamp mono">Out of memory</div>
+          <p className="ps__note mono">Illustration</p>
+        </div>
       </div>
-    </SectionWrapper>
-  );
+    </section>
+  )
 }
