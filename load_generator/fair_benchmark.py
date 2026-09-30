@@ -30,12 +30,24 @@ def parse_models(items):
     return models
 
 
+def context_limit(args, model_path):
+    config = Path(model_path)
+    if not config.is_absolute():
+        config = ROOT / config
+    try:
+        native = int(json.loads((config / "config.json").read_text())["max_position_embeddings"])
+    except (OSError, KeyError, ValueError):
+        return args.max_model_len
+    return min(args.max_model_len, native)
+
+
 def start_server(args, policy, model_path):
     log = open(OUT_DIR / "server.log", "ab")
     cmd = [
         sys.executable, "-m", "scheduler_engine.server",
         "--policy", policy, "--sla-ms", str(args.sla_ms),
         "--port", str(args.port), "--model-path", model_path,
+        "--max-model-len", str(context_limit(args, model_path)),
     ]
     if args.mock:
         cmd.append("--mock")
@@ -185,6 +197,7 @@ def main():
     p.add_argument("--requests", type=int, default=30)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--port", type=int, default=8000)
+    p.add_argument("--max-model-len", type=int, default=4096)
     p.add_argument("--settle", type=float, default=5.0)
     p.add_argument("--startup-timeout", type=float, default=600.0)
     p.add_argument("--mock", action="store_true")
