@@ -1,0 +1,19 @@
+{
+  "label": "stablelm_dynamic_mixed_r2",
+  "pattern": "flood",
+  "total_requests": 30,
+  "successful": 29,
+  "rejected_429": 1,
+  "errors": 0,
+  "wall_time_seconds": 8.517,
+  "throughput_req_per_sec": 3.4,
+  "p50_latency_seconds": 2.642,
+  "p95_latency_seconds": 8.147,
+  "p99_latency_seconds": 8.514,
+  "sla_compliance_rate_percent": 93.1,
+  "long_prompt_p99_seconds": 8.514,
+  "short_prompt_p99_seconds": 5.321,
+  "avg_gpu_util_percent": 95.2,
+  "max_gpu_util_percent": 99,
+  "avg_gpu_memory_mb": 6534
+}

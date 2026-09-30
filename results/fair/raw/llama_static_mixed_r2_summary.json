@@ -1,0 +1,19 @@
+{
+  "label": "llama_static_mixed_r2",
+  "pattern": "flood",
+  "total_requests": 30,
+  "successful": 30,
+  "rejected_429": 0,
+  "errors": 0,
+  "wall_time_seconds": 8.777,
+  "throughput_req_per_sec": 3.42,
+  "p50_latency_seconds": 3.99,
+  "p95_latency_seconds": 7.565,
+  "p99_latency_seconds": 8.773,
+  "sla_compliance_rate_percent": 96.7,
+  "long_prompt_p99_seconds": 8.773,
+  "short_prompt_p99_seconds": 5.778,
+  "avg_gpu_util_percent": 95.9,
+  "max_gpu_util_percent": 99,
+  "avg_gpu_memory_mb": 6542
+}

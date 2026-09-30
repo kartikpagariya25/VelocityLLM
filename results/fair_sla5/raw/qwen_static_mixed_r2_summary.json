@@ -1,0 +1,19 @@
+{
+  "label": "qwen_static_mixed_r2",
+  "pattern": "flood",
+  "total_requests": 30,
+  "successful": 30,
+  "rejected_429": 0,
+  "errors": 0,
+  "wall_time_seconds": 10.609,
+  "throughput_req_per_sec": 2.83,
+  "p50_latency_seconds": 4.483,
+  "p95_latency_seconds": 9.309,
+  "p99_latency_seconds": 10.605,
+  "sla_compliance_rate_percent": 60.0,
+  "long_prompt_p99_seconds": 10.605,
+  "short_prompt_p99_seconds": 6.836,
+  "avg_gpu_util_percent": 96.8,
+  "max_gpu_util_percent": 99,
+  "avg_gpu_memory_mb": 6584
+}

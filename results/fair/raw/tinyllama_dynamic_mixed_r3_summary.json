@@ -1,0 +1,19 @@
+{
+  "label": "tinyllama_dynamic_mixed_r3",
+  "pattern": "flood",
+  "total_requests": 30,
+  "successful": 30,
+  "rejected_429": 0,
+  "errors": 0,
+  "wall_time_seconds": 2.807,
+  "throughput_req_per_sec": 10.69,
+  "p50_latency_seconds": 0.225,
+  "p95_latency_seconds": 1.097,
+  "p99_latency_seconds": 2.803,
+  "sla_compliance_rate_percent": 100.0,
+  "long_prompt_p99_seconds": 2.803,
+  "short_prompt_p99_seconds": 0.852,
+  "avg_gpu_util_percent": 84.7,
+  "max_gpu_util_percent": 99,
+  "avg_gpu_memory_mb": 6570
+}
