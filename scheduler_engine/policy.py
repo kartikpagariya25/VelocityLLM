@@ -396,7 +396,7 @@ class DynamicBatchPolicy(SchedulerPolicy):
         admission = self.admission_controller.evaluate(
             request=request,
             current_queue_size=self.queue.size,
-            active_concurrency=len(self._active_requests),
+            active_concurrency=max(len(self._active_requests), self.adaptive_controller.current_concurrency),
             gpu_memory_used_mb=mem_used,
             gpu_memory_total_mb=mem_total,
         )
@@ -423,7 +423,7 @@ class DynamicBatchPolicy(SchedulerPolicy):
         admission = self.admission_controller.evaluate(
             request=request,
             current_queue_size=self.queue.size,
-            active_concurrency=len(self._active_requests),
+            active_concurrency=max(len(self._active_requests), self.adaptive_controller.current_concurrency),
             gpu_memory_used_mb=mem_used,
             gpu_memory_total_mb=mem_total,
         )
