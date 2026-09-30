@@ -1,0 +1,19 @@
+{
+  "label": "stablelm_static_flood_r1",
+  "pattern": "flood",
+  "total_requests": 30,
+  "successful": 30,
+  "rejected_429": 0,
+  "errors": 0,
+  "wall_time_seconds": 4.028,
+  "throughput_req_per_sec": 7.45,
+  "p50_latency_seconds": 2.347,
+  "p95_latency_seconds": 4.022,
+  "p99_latency_seconds": 4.024,
+  "sla_compliance_rate_percent": 100.0,
+  "long_prompt_p99_seconds": null,
+  "short_prompt_p99_seconds": 4.024,
+  "avg_gpu_util_percent": 67.7,
+  "max_gpu_util_percent": 98,
+  "avg_gpu_memory_mb": 6532
+}
