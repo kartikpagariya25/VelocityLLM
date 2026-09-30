@@ -5,10 +5,11 @@ import json
 import sys
 import time
 import random
+from pathlib import Path
 
 import aiohttp
 
-sys.path.append("/home/kartiklin/velocityllm/scheduler_engine")
+sys.path.append(str(Path(__file__).resolve().parent.parent / "scheduler_engine"))
 from gpu_monitor import GPUMonitor
 from traffic_patterns import generate_arrival_times, generate_mixed_prompts
 
