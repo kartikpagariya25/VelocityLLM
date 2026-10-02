@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { MODELS, PROMPTS, TRAFFIC, LIMITS, customTokens } from './sim'
-import { startSimRun, stepsFor } from './runner'
+import { startSimRun, startSimSweep, stepsFor } from './runner'
 import { startLiveRun, probe } from './live'
-import { newStore, apply, ROWS, change, sentence, toCsv, download, logLine, f2 } from './store'
-import { drawTimeline, drawConcurrency } from './charts'
+import { newStore, apply, ROWS, change, sentence, verdictOf, toCsv, download, logLine, f2 } from './store'
+import { drawTimeline, drawConcurrency, niceMax } from './charts'
+import Info from './Info'
+import Pressure from './Pressure'
+import Saved from './Saved'
+import { startReplay, configOf } from './replay'
 import './Lab.css'
 
 const PC_DEFAULT = window.location.port === '9000' ? window.location.origin : 'http://localhost:9000'
-const SOURCE_BADGE = { sim: 'Simulated run', pc: 'PC GPU', cloud: 'College GPU', mock: 'Mock engine' }
+const SOURCE_BADGE = { sim: 'Simulated run', pc: 'PC GPU', cloud: 'College GPU', mock: 'Mock engine', replay: 'Recorded run' }
+const INFO_KEY = { p50_s: 'p50', p95_s: 'p95', p99_s: 'p99', tokens_per_s: 'tokps', within_sla_served: 'slaServed', within_sla_offered: 'slaOffered', served: 'served', rejected: 'rejected', errors: 'errors' }
 const CATS = ['admission', 'controller', 'lifecycle', 'system']
 const BURSTS = [20, 50, 100]
 const DEF = { users: 30, prompt: 'medium', text: '', traffic: 'flood', sla: 8, model: 'llama', mode: 'sequential', speed: 4 }
@@ -20,10 +25,13 @@ const loadHistory = () => {
   }
 }
 
-function Tile({ label, value, tone }) {
+function Tile({ label, value, tone, info }) {
   return (
     <div className={`tile ${tone || ''}`}>
-      <span>{label}</span>
+      <span>
+        {label}
+        {info && <Info id={info} />}
+      </span>
       <b>{value}</b>
     </div>
   )
@@ -34,7 +42,7 @@ function Panel({ name, policy, store, onPick }) {
   const hit = useRef([])
   const p = store[policy]
   const m = p.metrics
-  const tMax = Math.max(10, Math.ceil(Math.max(0, ...store.static.series.map((x) => x.t), ...store.dynamic.series.map((x) => x.t)) / 5) * 5)
+  const tMax = niceMax(Math.max(0, ...store.static.series.map((x) => x.t), ...store.dynamic.series.map((x) => x.t)))
 
   useEffect(() => {
     if (cv.current) drawTimeline(cv.current, p.reqs, store.cfg.sla, tMax, hit.current)
@@ -55,19 +63,25 @@ function Panel({ name, policy, store, onPick }) {
   return (
     <section className={`panel panel--${policy}`}>
       <header>
-        <h3>{name}</h3>
+        <h3>
+          {name}
+          <Info id={policy} />
+        </h3>
         <span className={`badge badge--${state.toLowerCase()}`}>{state}</span>
       </header>
       <div className="tiles">
-        <Tile label="Active" value={m?.active ?? 0} />
-        <Tile label="Queued" value={m?.queued ?? 0} />
-        <Tile label="Limit" value={m?.concurrency_limit ?? '-'} tone={policy === 'dynamic' ? 'hot' : ''} />
-        <Tile label="Done" value={m?.completed ?? 0} tone="ok" />
-        <Tile label="Rejected" value={m?.rejected ?? 0} tone="rej" />
-        <Tile label="p95" value={p95 == null ? '-' : `${f2(p95)}s`} />
-        <Tile label="GPU mem" value={m ? `${Math.round((m.gpu_mem_used_mb / m.gpu_mem_total_mb) * 100)}%` : '-'} />
-        <Tile label="Tokens" value={m?.tokens ?? 0} />
+        <Tile info="active" label="Active" value={m?.active ?? 0} />
+        <Tile info="queued" label="Queued" value={m?.queued ?? 0} />
+        <Tile info="limit" label="Limit" value={m?.concurrency_limit ?? '-'} tone={policy === 'dynamic' ? 'hot' : ''} />
+        <Tile info="done" label="Done" value={m?.completed ?? 0} tone="ok" />
+        <Tile info="rejected" label="Rejected" value={m?.rejected ?? 0} tone="rej" />
+        <Tile info="p95" label="p95" value={p95 == null ? '-' : `${f2(p95)}s`} />
+        <Tile info="mem" label="GPU mem" value={m ? `${Math.round((m.gpu_mem_used_mb / m.gpu_mem_total_mb) * 100)}%` : '-'} />
+        <Tile info="tokens" label="Tokens" value={m?.tokens ?? 0} />
       </div>
+      <p className="cap">
+        Request timeline <Info id="timeline" />
+      </p>
       <canvas ref={cv} className="timeline" onClick={click} aria-label={`${name} request timeline`} />
     </section>
   )
@@ -105,7 +119,9 @@ function Console({ logs, running }) {
   return (
     <section className="console">
       <header>
-        <h3>Execution log</h3>
+        <h3>
+          Execution log <Info id="log" />
+        </h3>
         <span className="count">{view.length} lines</span>
         {running && <span className="live-dot" />}
         <div className="seg">
@@ -148,16 +164,24 @@ function Console({ logs, running }) {
   )
 }
 
-function Results({ store, label }) {
+function Results({ store, label, recordingUrl }) {
   const s = store.static.result
   const d = store.dynamic.result
   if (!s && !d) return null
   return (
     <section className="results">
       <header>
-        <h3>Results {label && <small>{label}</small>}</h3>
+        <h3>
+          Results {label && <small>{label}</small>}
+          {store.users > 0 && store.cfg.levels?.length > 1 && <small>at {store.users} users</small>}
+        </h3>
         {s && d && (
           <div className="exports">
+            {recordingUrl && (
+              <a className="mini" href={recordingUrl}>
+                Recording
+              </a>
+            )}
             <button className="mini" onClick={() => download('velocityllm-results.csv', toCsv(store), 'text/csv')}>
               CSV
             </button>
@@ -183,10 +207,14 @@ function Results({ store, label }) {
           <tbody>
             {ROWS.filter(([k]) => k !== 'errors' || s?.errors || d?.errors).map(([k, name, fmt, good]) => {
               const delta = s && d ? change(s[k], d[k]) : null
-              const better = good && delta != null && Math.abs(delta) >= 1 ? (good === 'low' ? delta < 0 : delta > 0) : null
+              const verdict = good && delta != null ? verdictOf(delta, good === 'low') : 'same'
+              const better = verdict === 'same' ? null : verdict === 'better'
               return (
                 <tr key={k}>
-                  <td>{name}</td>
+                  <td>
+                    {name}
+                    {INFO_KEY[k] && <Info id={INFO_KEY[k]} />}
+                  </td>
                   <td>{s ? fmt(s[k]) : '-'}</td>
                   <td>{d ? fmt(d[k]) : '-'}</td>
                   <td className={better == null ? '' : better ? 'good' : 'bad'}>
@@ -198,7 +226,7 @@ function Results({ store, label }) {
           </tbody>
         </table>
       </div>
-      {s && d && <p className="verdict">{sentence(store.cfg, s, d)}</p>}
+      {s && d && <p className="verdict">{sentence(store.cfg, s, d, store.users, store.repeats)}</p>}
     </section>
   )
 }
@@ -341,27 +369,59 @@ export default function Lab() {
     })
   }, [])
 
-  const run = async () => {
+  const launch = async (levels) => {
     setErr('')
     setPick(null)
     setViewing(null)
-    if (cfg.users < LIMITS.users[0] || cfg.users > LIMITS.users[1]) return setErr(`Users must be between ${LIMITS.users[0]} and ${LIMITS.users[1]}.`)
+    const sweep = levels && levels.length > 1
+    if (!sweep && (cfg.users < LIMITS.users[0] || cfg.users > LIMITS.users[1])) return setErr(`Users must be between ${LIMITS.users[0]} and ${LIMITS.users[1]}.`)
     if (cfg.prompt === 'custom' && !cfg.text.trim()) return setErr('Type a prompt or pick a preset.')
-    const full = { ...cfg, id: `run-${Date.now().toString(36)}` }
+    const full = { ...cfg, id: `run-${Date.now().toString(36)}`, levels: sweep ? levels : [cfg.users], users: sweep ? Math.max(...levels) : cfg.users }
     const s = newStore(full, stepsFor(cfg.mode), source)
+    s.users = full.users
+    s.repeats = 1
     store.current = s
     const emit = (ev) => {
       apply(s, ev)
-      if (ev.event === 'done' && ev.data.status === 'completed') finishRecord(s)
+      if (ev.event === 'done' && ev.data.status === 'completed' && !sweep) finishRecord(s)
       dirty.current = true
     }
     try {
-      ctl.current = live ? await startLiveRun(url, full, emit) : startSimRun(full, emit)
+      if (live) {
+        ctl.current = await startLiveRun(url, full, emit)
+        s.runId = ctl.current.runId || null
+      } else {
+        ctl.current = sweep ? startSimSweep(full, levels, emit) : startSimRun(full, emit)
+      }
     } catch (e) {
       s.status = 'failed'
       s.error = e.message
     }
     dirty.current = true
+  }
+  const run = () => launch(null)
+
+  const replay = (rec, speed) => {
+    setErr('')
+    setPick(null)
+    setViewing(null)
+    const full = configOf(rec)
+    const s = newStore(full, stepsFor('sequential'), 'replay')
+    s.users = full.users
+    s.repeats = rec.config.repeats || 1
+    store.current = s
+    const emit = (ev) => {
+      apply(s, ev)
+      dirty.current = true
+    }
+    ctl.current = startReplay(rec, speed, emit)
+    dirty.current = true
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const judgePreset = (setLevels) => {
+    setCfg((c) => ({ ...c, traffic: 'mixed', sla: 5 }))
+    setLevels([30, 60, 100, 150])
   }
 
   const cancel = () => ctl.current?.cancel()
@@ -389,14 +449,14 @@ export default function Lab() {
         <section className="controls">
           <div className="grid">
             <label>
-              Users (1 request each)
+              <span className="lt">Users (1 request each) <Info id="users" /></span>
               <div className="row">
                 <input type="range" min={LIMITS.users[0]} max={LIMITS.users[1]} value={cfg.users} onChange={set('users')} />
                 <input type="number" min={LIMITS.users[0]} max={LIMITS.users[1]} value={cfg.users} onChange={set('users')} />
               </div>
             </label>
             <label>
-              Traffic type
+              <span className="lt">Traffic type <Info id="traffic" /></span>
               <select value={cfg.traffic} onChange={set('traffic')}>
                 {Object.entries(TRAFFIC).map(([k, v]) => (
                   <option key={k} value={k}>
@@ -407,7 +467,7 @@ export default function Lab() {
               <small>{TRAFFIC[cfg.traffic].hint}</small>
             </label>
             <label>
-              Prompt
+              <span className="lt">Prompt <Info id="prompt" /></span>
               <select value={cfg.prompt} onChange={set('prompt')} disabled={cfg.traffic === 'mixed'}>
                 {Object.entries(PROMPTS).map(([k, v]) => (
                   <option key={k} value={k}>
@@ -418,14 +478,14 @@ export default function Lab() {
               <small>{cfg.traffic === 'mixed' ? '70% short, 30% long' : `about ${tokensEst} output tokens per request`}</small>
             </label>
             <label>
-              SLA target
+              <span className="lt">SLA target <Info id="sla" /></span>
               <div className="row">
                 <input type="range" min={LIMITS.sla[0]} max={LIMITS.sla[1]} step="0.5" value={cfg.sla} onChange={set('sla')} />
                 <output>{cfg.sla.toFixed(1)} s</output>
               </div>
             </label>
             <label>
-              Model
+              <span className="lt">Model <Info id="model" /></span>
               <select value={cfg.model} onChange={set('model')}>
                 {modelOptions.length === 0 && <option value="">No models available</option>}
                 {modelOptions.map((m) => (
@@ -436,14 +496,14 @@ export default function Lab() {
               </select>
             </label>
             <label>
-              Run mode
+              <span className="lt">Run mode <Info id="mode" /></span>
               <select value={live ? 'sequential' : cfg.mode} onChange={set('mode')} disabled={live}>
                 <option value="sequential">Sequential (one GPU, fair)</option>
                 <option value="parallel">Side by side (simulation only)</option>
               </select>
             </label>
             <label>
-              Data source
+              <span className="lt">Data source <Info id="source" /></span>
               <select value={source} onChange={(e) => setSource(e.target.value)}>
                 <option value="sim">Simulation</option>
                 <option value="pc">PC GPU (this machine)</option>
@@ -465,7 +525,7 @@ export default function Lab() {
             </label>
             {source === 'sim' && (
               <label>
-                Playback speed
+                <span className="lt">Playback speed <Info id="speed" /></span>
                 <select value={cfg.speed} onChange={set('speed')}>
                   {[1, 2, 4, 8].map((x) => (
                     <option key={x} value={x}>
@@ -512,6 +572,7 @@ export default function Lab() {
               <button className="boom" onClick={doBurst} disabled={!canBurst}>
                 Burst
               </button>
+              <Info id="burst" />
             </div>
             {err && <span className="err">{err}</span>}
             {st?.status === 'failed' && <span className="err">{st.error}</span>}
@@ -565,7 +626,9 @@ export default function Lab() {
             </div>
             <section className="aimd">
               <header>
-                <h3>Concurrency over time</h3>
+                <h3>
+                  Concurrency over time <Info id="concurrency" />
+                </h3>
                 <span className="legend">
                   <i className="lg lg--s" />
                   Static limit (fixed {8})<i className="lg lg--d" />
@@ -575,11 +638,14 @@ export default function Lab() {
               <canvas ref={cc} className="aimd__cv" />
             </section>
             <Console logs={st.logs} running={running} />
-            <Results store={shown} label={viewing ? 'from history' : ''} />
+            <Results store={shown} label={viewing ? 'from history' : st.source === 'replay' ? 'recorded run' : ''} recordingUrl={live && st.runId && st.status === 'done' ? `${url.replace(/\/+$/, '')}/api/runs/${st.runId}/recording` : null} />
           </>
         ) : (
           <p className="idle">Choose the traffic, set the SLA and press Run comparison. Static and Dynamic face identical requests, and every scheduler decision shows up in the log below.</p>
         )}
+
+        <Pressure store={st} running={running} disabled={blocked || (live && modelOptions.length === 0)} onRun={launch} onJudgePreset={judgePreset} />
+        <Saved base={live ? url : urls.pc} refreshKey={st?.status} onReplay={replay} busy={running} />
 
         {history.length > 0 && (
           <section className="history">

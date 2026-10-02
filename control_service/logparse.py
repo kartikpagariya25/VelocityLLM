@@ -9,7 +9,7 @@ APP = re.compile(r"^\S+ \S+ \[\w+\] \[cid=[^\]]*\] [\w.]+: ")
 def classify(raw: str):
     text = ANSI.sub("", raw).rstrip()
     m = LEVEL.search(text)
-    level = (m.group(1) or m.group(2)) if m else "INFO"
+    level = (m.group(1) or m.group(2)) if m else ("WARNING" if "Warning" in text else "INFO")
     message = APP.sub("", text, count=1)
     low = message.lower()
     rid = None
