@@ -33,6 +33,7 @@ export async function startLiveRun(base, cfg, emit) {
         sla_ms: Math.round(cfg.sla * 1000),
         requests: cfg.users,
         repeats: 1,
+        levels: cfg.levels && cfg.levels.length > 1 ? cfg.levels : null,
         mode: 'sequential',
         prompt_preset: cfg.prompt,
         prompt_text: cfg.prompt === 'custom' ? cfg.text : null,

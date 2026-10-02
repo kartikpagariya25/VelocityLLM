@@ -4,6 +4,7 @@ import secrets
 import time
 
 from .config import MAX_USERS
+from .environment import capture
 from .engine import Engine, EngineError, free_port
 from .gpu import gpu_info
 from .loadgen import build_plan, run_load, write_csv
@@ -127,31 +128,46 @@ class Orchestrator:
             raise RunFailed(f"Model folder for '{cfg['model']}' was not found at {model_path}")
         if not report["ok"]:
             raise RunFailed("Pre-flight failed", [f"{c['label']}: {c['detail']}" for c in report["checks"] if not c["ok"] and c["level"] == "error"])
+        env = await capture()
+        levels_cfg = cfg.get("levels") or [cfg["requests"]]
         await run.emit("info", {
-            "gpu": report["gpu"], "model": cfg["model"], "mock": mock, "sla_s": sla_s, "users": cfg["requests"],
+            "gpu": report["gpu"], "model": cfg["model"], "mock": mock, "sla_s": sla_s, "users": max(levels_cfg), "levels": levels_cfg,
+            "environment": env,
             "scenario": cfg["scenario"], "repeats": cfg["repeats"], "seed": cfg["seed"], "recorded": False,
         })
         if run.warning:
             await self.log(run, None, run.warning, "system", "WARNING")
 
-        collected = {p: [] for p in POLICIES}
+        levels = cfg.get("levels") or [cfg["requests"]]
+        primary = max(levels)
+        collected = {p: {n: [] for n in levels} for p in POLICIES}
         for rnd in range(1, cfg["repeats"] + 1):
             order = POLICIES if rnd % 2 else POLICIES[::-1]
             for policy in order:
-                rows, wall = await self._leg(run, cfg, policy, rnd, model_path, mock, sla_s)
-                collected[policy].append(score(rows, sla_s, wall))
-                try:
-                    write_csv(run.dir / f"raw_{policy}_r{rnd}.csv", rows)
-                except OSError as e:
-                    await self.log(run, policy, f"Could not save raw CSV: {e}", "system", "WARNING")
+                legs = await self._leg(run, cfg, policy, rnd, model_path, mock, sla_s, levels)
+                for n, (rows, wall) in legs.items():
+                    collected[policy][n].append(score(rows, sla_s, wall))
+                    name = f"raw_{policy}_r{rnd}.csv" if len(levels) == 1 else f"raw_{policy}_n{n}_r{rnd}.csv"
+                    try:
+                        write_csv(run.dir / name, rows)
+                    except OSError as e:
+                        await self.log(run, policy, f"Could not save raw CSV: {e}", "system", "WARNING")
 
         await self.phase(run, "scoring")
-        results = {p: median_of(collected[p]) for p in POLICIES}
+        per_level = {p: {n: median_of(collected[p][n]) for n in levels} for p in POLICIES}
+        if len(levels) > 1 and cfg["repeats"] > 1:
+            for p in POLICIES:
+                for n in levels:
+                    await run.emit("level_result", {"policy": p, "level": n, "final": True, **per_level[p][n]})
+        results = {p: per_level[p][primary] for p in POLICIES}
         for p in POLICIES:
-            await run.emit("result", {"policy": p, **results[p]})
+            await run.emit("result", {"policy": p, "level": primary, **results[p]})
         payload = {
             "config": cfg, "status": "completed", "created": run.created, "gpu": report["gpu"],
-            "model_path": model_path, "results": results, "per_repeat": collected,
+            "model_path": model_path, "levels": levels, "results": results,
+            "per_level": {p: {str(n): v for n, v in per_level[p].items()} for p in POLICIES},
+            "per_repeat": {p: {str(n): v for n, v in collected[p].items()} for p in POLICIES},
+            "environment": env,
         }
         run.results = payload
         try:
@@ -161,7 +177,7 @@ class Orchestrator:
         await self.phase(run, "done")
         await run.emit("done", {"run_id": run.id, "status": "completed"})
 
-    async def _leg(self, run, cfg, policy, rnd, model_path, mock, sla_s):
+    async def _leg(self, run, cfg, policy, rnd, model_path, mock, sla_s, levels):
         s = self.settings
         await self.phase(run, f"{policy}_start", policy, rnd)
         port = free_port(s.engine_base_port)
@@ -175,6 +191,7 @@ class Orchestrator:
         engine = Engine(s, policy, model_path, cfg["sla_ms"], port, mock, on_line, run.dir / f"server_{policy}_r{rnd}.log")
         await self.log(run, policy, "python3 -m scheduler_engine.server " + " ".join(engine.command()[3:]))
         poller = watcher = None
+        out = {}
         try:
             try:
                 await engine.start()
@@ -187,37 +204,47 @@ class Orchestrator:
             if warm_rows and all(r["status"] == "error" for r in warm_rows):
                 raise RunFailed(f"Warm-up failed on the {policy} engine: {warm_rows[0]['error']}", engine.tail)
             await self.log(run, policy, "Warm-up finished, results discarded from scoring")
-            await self._settle(s.settle_seconds)
-
-            base = await engine.stats() or {}
-            plan = build_plan(cfg["scenario"], cfg["requests"], cfg["seed"] + rnd, cfg["prompt_preset"], cfg["prompt_text"])
-            await self.phase(run, f"{policy}_load", policy, rnd)
-            loop = asyncio.get_running_loop()
-            load_start = loop.time()
-
-            async def on_request(row):
-                await run.emit("request", {
-                    "policy": policy, "request_id": row["request_id"], "arrival_s": round(row["arrival_s"], 3),
-                    "start_s": None if row["start_s"] is None else round(row["start_s"], 3),
-                    "end_s": round(row["end_s"], 3), "status": row["status"], "http_status": row["http_status"],
-                    "tokens": row["tokens"], "priority": row["priority"], "reject_reason": row["reject_reason"],
-                    "retry_after_s": row["retry_after_s"], "error": row["error"],
-                })
-
-            poller = asyncio.create_task(self._poll(run, engine, policy, base, load_start))
-            load = asyncio.create_task(run_load(engine.base, plan, s.request_timeout, on_request, "r"))
             watcher = asyncio.create_task(engine.wait_exit())
-            done, _ = await asyncio.wait({load, watcher}, return_when=asyncio.FIRST_COMPLETED)
-            if load not in done:
-                load.cancel()
-                await asyncio.gather(load, return_exceptions=True)
-                raise RunFailed(f"The {policy} engine crashed during the load phase (exit code {watcher.result()})", engine.tail)
-            rows, wall = load.result()
-            await self._poll_once(run, engine, policy, base, load_start)
-            errors = [r for r in rows if r["status"] == "error"]
-            if errors:
-                await self.log(run, policy, f"{len(errors)} of {len(rows)} requests failed, first error: {errors[0]['error']}", "error", "WARNING")
-            return rows, wall
+            for n in levels:
+                await self._settle(s.settle_seconds)
+                base = await engine.stats() or {}
+                plan = build_plan(cfg["scenario"], n, cfg["seed"] + rnd, cfg["prompt_preset"], cfg["prompt_text"])
+                await run.emit("phase", {"phase": f"{policy}_load", "policy": policy, "repeat": rnd, "level": n, "ts": time.time()})
+                if len(levels) > 1:
+                    await self.log(run, policy, f"Load level: {n} users")
+                loop = asyncio.get_running_loop()
+                load_start = loop.time()
+
+                async def on_request(row):
+                    await run.emit("request", {
+                        "policy": policy, "request_id": row["request_id"], "arrival_s": round(row["arrival_s"], 3),
+                        "start_s": None if row["start_s"] is None else round(row["start_s"], 3),
+                        "end_s": round(row["end_s"], 3), "status": row["status"], "http_status": row["http_status"],
+                        "tokens": row["tokens"], "priority": row["priority"], "reject_reason": row["reject_reason"],
+                        "retry_after_s": row["retry_after_s"], "error": row["error"],
+                    })
+
+                poller = asyncio.create_task(self._poll(run, engine, policy, base, load_start))
+                load = asyncio.create_task(run_load(engine.base, plan, s.request_timeout, on_request, "r"))
+                done, _ = await asyncio.wait({load, watcher}, return_when=asyncio.FIRST_COMPLETED)
+                if load not in done:
+                    load.cancel()
+                    await asyncio.gather(load, return_exceptions=True)
+                    raise RunFailed(f"The {policy} engine crashed during the load phase (exit code {watcher.result()})", engine.tail)
+                rows, wall = load.result()
+                poller.cancel()
+                await asyncio.gather(poller, return_exceptions=True)
+                poller = None
+                await self._poll_once(run, engine, policy, base, load_start)
+                errors = [r for r in rows if r["status"] == "error"]
+                if errors:
+                    await self.log(run, policy, f"{len(errors)} of {len(rows)} requests failed, first error: {errors[0]['error']}", "error", "WARNING")
+                result = score(rows, sla_s, wall)
+                if result["zero_token_share"] > 0.5:
+                    await self.log(run, policy, f"{result['zero_token_share'] * 100:.0f}% of replies had zero tokens; this model is not producing usable output", "error", "WARNING")
+                await run.emit("level_result", {"policy": policy, "level": n, "repeat": rnd, **result})
+                out[n] = (rows, wall)
+            return out
         finally:
             for t in (poller, watcher):
                 if t:

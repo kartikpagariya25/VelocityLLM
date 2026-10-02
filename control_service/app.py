@@ -2,6 +2,8 @@ import asyncio
 import csv
 import io
 import json
+import time
+import zipfile
 from contextlib import asynccontextmanager
 from typing import Literal, Optional
 
@@ -34,7 +36,17 @@ class RunRequest(BaseModel):
     prompt_preset: Literal["short", "medium", "long", "custom"] = "medium"
     prompt_text: Optional[str] = Field(default=None, max_length=500)
     seed: int = Field(default=42, ge=0, le=1_000_000)
+    levels: Optional[list[int]] = Field(default=None, max_length=8)
     mock: Optional[bool] = None
+
+    @field_validator("levels")
+    @classmethod
+    def check_levels(cls, v):
+        if v is None:
+            return v
+        if any(n < 1 or n > MAX_USERS for n in v):
+            raise ValueError(f"each level must be between 1 and {MAX_USERS}")
+        return sorted(set(v))
 
     @field_validator("prompt_text")
     @classmethod
@@ -189,6 +201,40 @@ def create_app(settings: Settings) -> FastAPI:
             raise HTTPException(409, "Run already finished")
         run.task.cancel()
         return {"run_id": run.id, "status": "cancelling"}
+
+    @app.get("/api/runs/{run_id}/recording")
+    async def recording(run_id: str):
+        run = get_run(run_id)
+        if not run.results:
+            raise HTTPException(409, "Only completed runs have a recording")
+        body = {"format": "velocityllm-recording-1", "id": run.id, "config": run.config, "results": run.results, "events": store.events_of(run)}
+        return Response(json.dumps(body), media_type="application/json",
+                        headers={"Content-Disposition": f'attachment; filename="{run.id}.recording.json"'})
+
+    @app.get("/api/benchmarks/export")
+    async def export_all():
+        done = [r for r in store.runs.values() if r.results]
+        if not done:
+            raise HTTPException(404, "No completed runs to export yet")
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            summary = io.StringIO()
+            w = csv.writer(summary)
+            w.writerow(["run_id", "date", "model", "gpu", "users", "scenario", "sla_s", "policy", *ROWS])
+            for r in sorted(done, key=lambda x: x.created):
+                gpu = (r.results.get("gpu") or {}).get("name", "mock" if r.config.get("mock") else "")
+                for pol in ("static", "dynamic"):
+                    res = r.results["results"][pol]
+                    w.writerow([r.id, time.strftime("%Y-%m-%d %H:%M", time.localtime(r.created)), r.config["model"], gpu,
+                                max(r.results.get("levels") or [r.config["requests"]]), r.config["scenario"], r.config["sla_ms"] / 1000, pol,
+                                *[res[k] for k in ROWS]])
+            z.writestr("benchmarks_summary.csv", summary.getvalue())
+            for r in done:
+                for f in sorted(r.dir.iterdir()):
+                    if f.is_file():
+                        z.write(f, f"{r.id}/{f.name}")
+        return Response(buf.getvalue(), media_type="application/zip",
+                        headers={"Content-Disposition": 'attachment; filename="velocityllm-benchmarks.zip"'})
 
     @app.get("/api/runs/{run_id}/export")
     async def export(run_id: str, format: Literal["csv", "json"] = "json"):

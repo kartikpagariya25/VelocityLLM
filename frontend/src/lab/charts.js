@@ -19,7 +19,7 @@ const axis = (ctx, w, h, pad, tMax, label) => {
   ctx.fillStyle = C.mute
   ctx.strokeStyle = C.line
   ctx.lineWidth = 1
-  const step = tMax > 60 ? 20 : tMax > 30 ? 10 : 5
+  const step = tMax > 60 ? 20 : tMax > 30 ? 10 : tMax > 12 ? 5 : tMax > 6 ? 2 : 1
   for (let t = 0; t <= tMax; t += step) {
     const x = pad.l + (t / tMax) * (w - pad.l - pad.r)
     ctx.beginPath()
@@ -30,6 +30,8 @@ const axis = (ctx, w, h, pad, tMax, label) => {
   }
   if (label) ctx.fillText(label, pad.l, 10)
 }
+
+export const niceMax = (t) => Math.max(4, Math.ceil(t * 1.04))
 
 export const rowLayout = (n, h, pad) => {
   const rows = Math.max(n, 1)
@@ -68,7 +70,7 @@ export function drawConcurrency(canvas, store) {
   const { ctx, w, h } = setup(canvas)
   const pad = { l: 30, r: 10, t: 14, b: 18 }
   const all = [...store.static.series, ...store.dynamic.series]
-  const tMax = Math.max(10, Math.ceil(Math.max(0, ...all.map((p) => p.t)) / 5) * 5)
+  const tMax = niceMax(Math.max(0, ...all.map((p) => p.t)))
   const yMax = Math.max(16, ...all.map((p) => Math.max(p.limit, p.active))) + 1
   axis(ctx, w, h, pad, tMax, 'concurrency limit and requests in flight')
   const X = (t) => pad.l + (t / tMax) * (w - pad.l - pad.r)
@@ -111,4 +113,56 @@ export function drawConcurrency(canvas, store) {
     ctx.arc(X(last.t), Y(last.limit), 4, 0, 7)
     ctx.fill()
   }
+}
+
+export function drawSweep(canvas, levels, data, key, opts) {
+  const { ctx, w, h } = setup(canvas)
+  const pad = { l: 44, r: 14, t: 18, b: 24 }
+  const pts = (pol) => levels.filter((n) => data[pol][n]).map((n) => [n, data[pol][n][key] * (opts.scale || 1)])
+  const all = [...pts('static'), ...pts('dynamic')]
+  const xMax = Math.max(...levels)
+  const yMax = opts.fixedMax || Math.max(opts.sla || 0, ...all.map((p) => p[1]), 1) * 1.12
+  const X = (n) => pad.l + (n / xMax) * (w - pad.l - pad.r)
+  const Y = (v) => h - pad.b - (v / yMax) * (h - pad.t - pad.b)
+  ctx.font = '10px JetBrains Mono, monospace'
+  ctx.fillStyle = C.mute
+  ctx.strokeStyle = C.line
+  ctx.lineWidth = 1
+  for (let i = 0; i <= 4; i++) {
+    const v = (yMax / 4) * i
+    ctx.beginPath()
+    ctx.moveTo(pad.l, Y(v))
+    ctx.lineTo(w - pad.r, Y(v))
+    ctx.stroke()
+    ctx.fillText(opts.fmt ? opts.fmt(v) : v.toFixed(0), 4, Y(v) + 3)
+  }
+  levels.forEach((n) => ctx.fillText(String(n), X(n) - 8, h - 8))
+  ctx.fillText(opts.title, pad.l, 10)
+  if (opts.sla) {
+    ctx.strokeStyle = C.ink
+    ctx.setLineDash([4, 4])
+    ctx.beginPath()
+    ctx.moveTo(pad.l, Y(opts.sla))
+    ctx.lineTo(w - pad.r, Y(opts.sla))
+    ctx.stroke()
+    ctx.setLineDash([])
+    ctx.fillStyle = C.ink
+    ctx.fillText('SLA', w - pad.r - 24, Y(opts.sla) - 4)
+  }
+  const line = (list, color, width) => {
+    if (!list.length) return
+    ctx.strokeStyle = color
+    ctx.fillStyle = color
+    ctx.lineWidth = width
+    ctx.beginPath()
+    list.forEach(([n, v], i) => (i ? ctx.lineTo(X(n), Y(v)) : ctx.moveTo(X(n), Y(v))))
+    ctx.stroke()
+    list.forEach(([n, v]) => {
+      ctx.beginPath()
+      ctx.arc(X(n), Y(v), 4, 0, 7)
+      ctx.fill()
+    })
+  }
+  line(pts('static'), C.stat, 2)
+  line(pts('dynamic'), C.dyn, 3)
 }

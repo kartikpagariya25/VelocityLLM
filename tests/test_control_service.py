@@ -56,3 +56,15 @@ def test_validation_errors(client):
 def test_models_and_preflight(client):
     assert client.get("/api/models").json()[0]["id"] == "mock-model"
     assert client.get("/api/preflight").json()["ok"] is True
+
+
+def test_levels_validation(client):
+    base = {"model": "mock-model"}
+    assert client.post("/api/runs", json={**base, "levels": [0, 10]}).status_code == 422
+    assert client.post("/api/runs", json={**base, "levels": [10, 500]}).status_code == 422
+    assert client.post("/api/runs", json={**base, "levels": list(range(1, 11))}).status_code == 422
+
+
+def test_recording_and_export_need_completed_run(client):
+    assert client.get("/api/benchmarks/export").status_code == 404
+    assert client.get("/api/runs/missing/recording").status_code == 404

@@ -1,5 +1,7 @@
 import { Sim, buildArrivals, promptTokens, MODELS } from './sim'
 
+const POLICIES = ['static', 'dynamic']
+
 const sleep = (ms, signal) =>
   new Promise((res) => {
     const id = setTimeout(res, ms)
@@ -45,7 +47,7 @@ export function startSimRun(cfg, emit) {
   const burstTokens = promptTokens(cfg.prompt, cfg.text)
   const ts = () => performance.now() / 1000
 
-  const phase = (name, policy = null) => emit({ event: 'phase', data: { phase: name, policy, repeat: 1, ts: ts() } })
+  const phase = (name, policy = null, level = null) => emit({ event: 'phase', data: { phase: name, policy, repeat: 1, level, ts: ts() } })
   const sys = (policy, message, category = 'system', level = 'INFO') =>
     emit({ event: 'log', data: { policy, ts: 0, level, category, request_id: null, message } })
 
@@ -147,5 +149,60 @@ export function startSimRun(cfg, emit) {
       sims.forEach((s) => s.inject(list))
       sys(null, `Judge burst: ${n} extra requests injected at t=${t.toFixed(1)}s`, 'system', 'WARNING')
     },
+  }
+}
+
+export function startSimSweep(cfg, levels, emit) {
+  const ac = new AbortController()
+  const { signal } = ac
+  const model = MODELS.find((m) => m.id === cfg.model)
+  const phase = (name, policy = null, level = null) => emit({ event: 'phase', data: { phase: name, policy, repeat: 1, level, ts: performance.now() / 1000 } })
+  const sys = (policy, message) => emit({ event: 'log', data: { policy, ts: 0, level: 'INFO', category: 'system', request_id: null, message } })
+  const top = Math.max(...levels)
+  const results = {}
+
+  const run = async () => {
+    try {
+      phase('preflight')
+      sys(null, `Pre-flight: pressure test of ${levels.join(', ')} users on ${model.name}, SLA ${cfg.sla.toFixed(1)} s (simulated)`)
+      await sleep(300, signal)
+      for (const policy of POLICIES) {
+        phase(`${policy}_start`, policy)
+        sys(policy, `python3 -m scheduler_engine.server --policy ${policy}${policy === 'dynamic' ? ` --sla-ms ${Math.round(cfg.sla * 1000)}` : ''} --max-concurrency 16`)
+        await sleep(300, signal)
+        phase(`${policy}_warmup`, policy)
+        sys(policy, 'Warm-up request sent, discarded from scoring')
+        await sleep(300, signal)
+        for (const n of levels) {
+          if (signal.aborted) return
+          phase(`${policy}_load`, policy, n)
+          sys(policy, `Load level: ${n} users`)
+          const sim = new Sim({ policy, arrivals: buildArrivals({ ...cfg, users: n }), sla: cfg.sla, tpt: model.tpt, emit })
+          sim.advance(1e6)
+          const result = { ...sim.result(), errors: 0 }
+          emit({ event: 'level_result', data: { policy, level: n, repeat: 1, ...result } })
+          if (n === top) results[policy] = result
+          await sleep(350, signal)
+        }
+      }
+      if (signal.aborted) return
+      phase('scoring')
+      await sleep(300, signal)
+      POLICIES.forEach((policy) => emit({ event: 'result', data: { policy, level: top, ...results[policy] } }))
+      phase('done')
+      emit({ event: 'done', data: { run_id: cfg.id, status: 'completed' } })
+    } catch (e) {
+      emit({ event: 'error', data: { message: String(e.message || e) } })
+    }
+  }
+  run()
+
+  return {
+    cancel: () => {
+      ac.abort()
+      emit({ event: 'done', data: { run_id: cfg.id, status: 'cancelled' } })
+    },
+    canBurst: () => false,
+    burst: () => {},
   }
 }
