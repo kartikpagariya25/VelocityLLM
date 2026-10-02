@@ -93,3 +93,24 @@ def test_admission_ema_update():
 
     controller.update_completion_stats(latency_seconds=3.0, tokens_generated=100)
     assert controller._ema_service_time > initial_service
+
+
+def test_slow_cold_start_does_not_lock_out_traffic():
+    config = ServerConfig(max_queue_size=100, target_sla_ms=8000.0)
+    controller = AdmissionController(config)
+    for _ in range(8):
+        controller.update_completion_stats(50.0, 50)
+
+    req = InferenceRequest(prompt="Hello", max_tokens=128, priority=RequestPriority.NORMAL)
+    result = controller.evaluate(request=req, current_queue_size=0, active_concurrency=2)
+    assert result.admitted is True
+
+
+def test_idle_server_always_admits_a_probe():
+    config = ServerConfig(max_queue_size=100, target_sla_ms=1000.0)
+    controller = AdmissionController(config)
+    controller._ema_token_time = 1.0
+
+    req = InferenceRequest(prompt="Hello", max_tokens=128, priority=RequestPriority.NORMAL)
+    assert controller.evaluate(request=req, current_queue_size=0, active_concurrency=0).admitted is True
+    assert controller.evaluate(request=req, current_queue_size=0, active_concurrency=3).admitted is False

@@ -35,6 +35,7 @@ class AdmissionController:
         self._ema_token_time = 0.015  # ~15ms per token initial baseline
         self._ema_service_time = 1.2   # ~1.2s average request service time
         self._alpha = 0.1             # Smoothing factor for EMA updates
+        self._max_sample_growth = 2.0  # A single sample may at most double the estimate
 
         # Metrics counters
         self.total_evaluated = 0
@@ -48,11 +49,12 @@ class AdmissionController:
         if latency_seconds <= 0:
             return
 
-        self._ema_service_time = (self._alpha * latency_seconds) + (
+        service_sample = min(latency_seconds, self._ema_service_time * self._max_sample_growth)
+        self._ema_service_time = (self._alpha * service_sample) + (
             (1.0 - self._alpha) * self._ema_service_time
         )
         if tokens_generated > 0:
-            token_rate = latency_seconds / tokens_generated
+            token_rate = min(latency_seconds / tokens_generated, self._ema_token_time * self._max_sample_growth)
             self._ema_token_time = (self._alpha * token_rate) + (
                 (1.0 - self._alpha) * self._ema_token_time
             )
@@ -129,7 +131,8 @@ class AdmissionController:
         # Allow HIGH priority requests slightly more grace headroom (1.35x)
         tolerance_multiplier = 1.35 if request.priority == RequestPriority.HIGH else 1.05
 
-        if est_total_latency > (target_sla_sec * tolerance_multiplier):
+        server_idle = current_queue_size == 0 and active_concurrency == 0
+        if not server_idle and est_total_latency > (target_sla_sec * tolerance_multiplier):
             self.total_rejected_sla += 1
             retry_after = round(est_wait, 2)
             logger.info(
