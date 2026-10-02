@@ -153,3 +153,4 @@ td.good { color: var(--ok); font-weight: 600; } td.bad { color: var(--bad); font
 .cap { margin: 0; font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--mute); display: flex; align-items: center; gap: 6px; }
 .burst { align-items: center; }
 .lt { display: inline-flex; align-items: center; gap: 6px; }
+.warnline { margin: 0; padding: 10px 14px; border-radius: 10px; background: #fff4e0; border: 1px solid #f0c27a; color: #7a4a00; font-size: .86rem; }

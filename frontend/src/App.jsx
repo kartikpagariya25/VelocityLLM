@@ -10,6 +10,7 @@ import ModelStrip from './components/ModelStrip'
 import Team from './components/Team'
 import Footer from './components/Footer'
 import Lab from './lab/Lab'
+import Boundary from './lab/Boundary'
 
 function Site() {
   useEffect(() => {
@@ -47,5 +48,11 @@ export default function App() {
     window.addEventListener('hashchange', on)
     return () => window.removeEventListener('hashchange', on)
   }, [])
-  return lab ? <Lab /> : <Site />
+  return lab ? (
+    <Boundary>
+      <Lab />
+    </Boundary>
+  ) : (
+    <Site />
+  )
 }
