@@ -68,3 +68,14 @@ def test_levels_validation(client):
 def test_recording_and_export_need_completed_run(client):
     assert client.get("/api/benchmarks/export").status_code == 404
     assert client.get("/api/runs/missing/recording").status_code == 404
+
+
+def test_diagnose_flags_invalid_results():
+    from control_service.scoring import diagnose
+
+    base = {"offered": 100, "served": 100, "rejected": 0, "errors": 0, "zero_token_share": 0.0}
+    assert diagnose(base) == []
+    assert "No request was answered" in diagnose({**base, "served": 0, "rejected": 100})[0]
+    assert "mis-calibrated" in diagnose({**base, "served": 5, "rejected": 95})[0]
+    assert "failed" in diagnose({**base, "errors": 40})[0]
+    assert "zero tokens" in diagnose({**base, "zero_token_share": 0.9})[0]

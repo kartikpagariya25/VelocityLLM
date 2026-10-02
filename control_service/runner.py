@@ -12,7 +12,7 @@ from .logparse import classify, is_noise
 from .models import describe, discover
 from .preflight import run_checks
 from .runs import Run
-from .scoring import median_of, score
+from .scoring import diagnose, median_of, score
 
 POLICIES = ("static", "dynamic")
 
@@ -161,10 +161,11 @@ class Orchestrator:
                     await run.emit("level_result", {"policy": p, "level": n, "final": True, **per_level[p][n]})
         results = {p: per_level[p][primary] for p in POLICIES}
         for p in POLICIES:
-            await run.emit("result", {"policy": p, "level": primary, **results[p]})
+            await run.emit("result", {"policy": p, "level": primary, "warnings": diagnose(results[p]), **results[p]})
         payload = {
             "config": cfg, "status": "completed", "created": run.created, "gpu": report["gpu"],
             "model_path": model_path, "levels": levels, "results": results,
+            "warnings": {p: diagnose(results[p]) for p in POLICIES},
             "per_level": {p: {str(n): v for n, v in per_level[p].items()} for p in POLICIES},
             "per_repeat": {p: {str(n): v for n, v in collected[p].items()} for p in POLICIES},
             "environment": env,
@@ -200,9 +201,10 @@ class Orchestrator:
             await self.log(run, policy, f"Engine healthy on port {port}")
             await self.phase(run, f"{policy}_warmup", policy, rnd)
             warm = build_plan("flood", 8, 1, "short", None, max_tokens=50)
-            warm_rows, _ = await run_load(engine.base, warm, s.request_timeout, None, "warm")
-            if warm_rows and all(r["status"] == "error" for r in warm_rows):
-                raise RunFailed(f"Warm-up failed on the {policy} engine: {warm_rows[0]['error']}", engine.tail)
+            for _ in range(2):
+                warm_rows, _wall = await run_load(engine.base, warm, s.request_timeout, None, "warm")
+                if warm_rows and all(r["status"] == "error" for r in warm_rows):
+                    raise RunFailed(f"Warm-up failed on the {policy} engine: {warm_rows[0]['error']}", engine.tail)
             await self.log(run, policy, "Warm-up finished, results discarded from scoring")
             watcher = asyncio.create_task(engine.wait_exit())
             for n in levels:
@@ -240,9 +242,10 @@ class Orchestrator:
                 if errors:
                     await self.log(run, policy, f"{len(errors)} of {len(rows)} requests failed, first error: {errors[0]['error']}", "error", "WARNING")
                 result = score(rows, sla_s, wall)
-                if result["zero_token_share"] > 0.5:
-                    await self.log(run, policy, f"{result['zero_token_share'] * 100:.0f}% of replies had zero tokens; this model is not producing usable output", "error", "WARNING")
-                await run.emit("level_result", {"policy": policy, "level": n, "repeat": rnd, **result})
+                notes = diagnose(result)
+                for note in notes:
+                    await self.log(run, policy, f"Level {n}: {note}", "error", "WARNING")
+                await run.emit("level_result", {"policy": policy, "level": n, "repeat": rnd, "warnings": notes, **result})
                 out[n] = (rows, wall)
             return out
         finally:

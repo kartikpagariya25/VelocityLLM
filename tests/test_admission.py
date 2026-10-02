@@ -114,3 +114,26 @@ def test_idle_server_always_admits_a_probe():
     req = InferenceRequest(prompt="Hello", max_tokens=128, priority=RequestPriority.NORMAL)
     assert controller.evaluate(request=req, current_queue_size=0, active_concurrency=0).admitted is True
     assert controller.evaluate(request=req, current_queue_size=0, active_concurrency=3).admitted is False
+
+
+def test_idle_probe_uses_real_in_flight_count_not_the_concurrency_limit():
+    config = ServerConfig(max_queue_size=100, target_sla_ms=1000.0)
+    controller = AdmissionController(config)
+    controller._ema_token_time = 1.0
+
+    req = InferenceRequest(prompt="Hello", max_tokens=128, priority=RequestPriority.NORMAL)
+    idle = controller.evaluate(request=req, current_queue_size=0, active_concurrency=8, in_flight=0)
+    busy = controller.evaluate(request=req, current_queue_size=0, active_concurrency=8, in_flight=2)
+    assert idle.admitted is True
+    assert busy.admitted is False
+
+
+def test_stale_estimates_decay_toward_baseline():
+    config = ServerConfig(max_queue_size=100, target_sla_ms=8000.0)
+    controller = AdmissionController(config)
+    controller._ema_token_time = 0.5
+    controller._last_completion -= controller._stale_after_seconds + 1
+
+    req = InferenceRequest(prompt="Hello", max_tokens=10)
+    controller.evaluate(request=req, current_queue_size=0, active_concurrency=4, in_flight=1)
+    assert controller._ema_token_time < 0.5

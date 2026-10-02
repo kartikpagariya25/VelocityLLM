@@ -35,3 +35,19 @@ def median_of(results):
     if len(results) == 1:
         return dict(results[0])
     return {k: statistics.median(r[k] for r in results) for k in FIELDS}
+
+
+def diagnose(result):
+    offered = result.get("offered") or 0
+    if not offered:
+        return []
+    notes = []
+    if result["served"] == 0:
+        notes.append("No request was answered, so this result cannot be compared.")
+    elif result["rejected"] / offered >= 0.9:
+        notes.append(f"{result['rejected']} of {offered} requests were rejected; the admission estimate looks mis-calibrated, so treat this comparison as invalid and re-run.")
+    if result["errors"] / offered > 0.2:
+        notes.append(f"{result['errors']} of {offered} requests failed with errors.")
+    if result["zero_token_share"] > 0.5:
+        notes.append("Most replies had zero tokens; this model is not producing usable output.")
+    return notes

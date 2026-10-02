@@ -399,6 +399,7 @@ class DynamicBatchPolicy(SchedulerPolicy):
             active_concurrency=max(len(self._active_requests), self.adaptive_controller.current_concurrency),
             gpu_memory_used_mb=mem_used,
             gpu_memory_total_mb=mem_total,
+            in_flight=len(self._active_requests),
         )
 
         if not admission.admitted:
@@ -426,6 +427,7 @@ class DynamicBatchPolicy(SchedulerPolicy):
             active_concurrency=max(len(self._active_requests), self.adaptive_controller.current_concurrency),
             gpu_memory_used_mb=mem_used,
             gpu_memory_total_mb=mem_total,
+            in_flight=len(self._active_requests),
         )
 
         if not admission.admitted:

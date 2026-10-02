@@ -98,6 +98,10 @@ const phrase = (v, up, down) => (Math.abs(v) < NOISE ? 'about the same' : v < 0 
 
 export function sentence(cfg, s, d, users, repeats = 1) {
   if (!s || !d) return ''
+  if (!s.served || !d.served) {
+    const who = !s.served && !d.served ? 'Neither scheduler' : !d.served ? 'Dynamic' : 'Static'
+    return `${who} answered no requests at ${users ?? cfg.users} users, so there is nothing to compare. Check the warnings and the execution log, then run again.`
+  }
   const n = users ?? cfg.users
   const p99 = change(s.p99_s, d.p99_s)
   const p50 = change(s.p50_s, d.p50_s)
@@ -120,6 +124,7 @@ export function sweepSentence(cfg, levels, data) {
   const top = done[done.length - 1]
   const s = data.static[top]
   const d = data.dynamic[top]
+  if (!s.served || !d.served) return `At ${top} users ${!d.served ? 'Dynamic' : 'Static'} answered no requests, so the heaviest level cannot be compared. Check the warnings and the execution log, then run again.`
   const p99 = change(s.p99_s, d.p99_s)
   const sServed = s.within_sla_served
   const dServed = d.within_sla_served

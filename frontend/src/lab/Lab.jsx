@@ -226,6 +226,11 @@ function Results({ store, label, recordingUrl }) {
           </tbody>
         </table>
       </div>
+      {[...(s?.warnings || []).map((w) => `Static: ${w}`), ...(d?.warnings || []).map((w) => `Dynamic: ${w}`)].map((w) => (
+        <p key={w} className="warnline">
+          {w}
+        </p>
+      ))}
       {s && d && <p className="verdict">{sentence(store.cfg, s, d, store.users, store.repeats)}</p>}
     </section>
   )

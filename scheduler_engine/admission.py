@@ -36,6 +36,10 @@ class AdmissionController:
         self._ema_service_time = 1.2   # ~1.2s average request service time
         self._alpha = 0.1             # Smoothing factor for EMA updates
         self._max_sample_growth = 2.0  # A single sample may at most double the estimate
+        self._baseline_token_time = self._ema_token_time
+        self._baseline_service_time = self._ema_service_time
+        self._stale_after_seconds = 10.0
+        self._last_completion = time.monotonic()
 
         # Metrics counters
         self.total_evaluated = 0
@@ -48,6 +52,7 @@ class AdmissionController:
         """Update service time estimation metrics from completed requests."""
         if latency_seconds <= 0:
             return
+        self._last_completion = time.monotonic()
 
         service_sample = min(latency_seconds, self._ema_service_time * self._max_sample_growth)
         self._ema_service_time = (self._alpha * service_sample) + (
@@ -58,6 +63,16 @@ class AdmissionController:
             self._ema_token_time = (self._alpha * token_rate) + (
                 (1.0 - self._alpha) * self._ema_token_time
             )
+
+    def _decay_stale_estimates(self) -> None:
+        """Pull estimates back toward their baseline when no request has completed for a while."""
+        now = time.monotonic()
+        if now - self._last_completion < self._stale_after_seconds:
+            return
+        self._ema_token_time = (self._ema_token_time + self._baseline_token_time) / 2
+        self._ema_service_time = (self._ema_service_time + self._baseline_service_time) / 2
+        self._last_completion = now
+        logger.warning("No completions for %.0fs; service-time estimates decayed toward baseline.", self._stale_after_seconds)
 
     def estimate_wait_time(self, current_queue_size: int, active_concurrency: int) -> float:
         """
@@ -81,6 +96,7 @@ class AdmissionController:
         active_concurrency: int,
         gpu_memory_used_mb: int = 0,
         gpu_memory_total_mb: int = 8192,
+        in_flight: Optional[int] = None,
     ) -> AdmissionResult:
         """
         Evaluate whether to admit or reject an incoming request.
@@ -88,6 +104,7 @@ class AdmissionController:
         and SLA headroom prediction.
         """
         self.total_evaluated += 1
+        self._decay_stale_estimates()
         est_wait = self.estimate_wait_time(current_queue_size, active_concurrency)
 
         # 1. Check Hard Queue Capacity Limit
@@ -131,7 +148,8 @@ class AdmissionController:
         # Allow HIGH priority requests slightly more grace headroom (1.35x)
         tolerance_multiplier = 1.35 if request.priority == RequestPriority.HIGH else 1.05
 
-        server_idle = current_queue_size == 0 and active_concurrency == 0
+        running = active_concurrency if in_flight is None else in_flight
+        server_idle = current_queue_size == 0 and running == 0
         if not server_idle and est_total_latency > (target_sla_sec * tolerance_multiplier):
             self.total_rejected_sla += 1
             retry_after = round(est_wait, 2)
