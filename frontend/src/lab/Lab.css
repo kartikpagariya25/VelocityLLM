@@ -8,7 +8,7 @@
 .lab__back:hover { color: var(--hot); border-color: var(--hot); }
 .src { font-family: var(--mono); font-size: .68rem; padding: 4px 10px; border-radius: 999px; letter-spacing: .06em; text-transform: uppercase; }
 .src--sim { background: #fff3d6; color: #8a5d00; }
-.src--live { background: #dcf5e8; color: #0b7a47; }
+.src--pc, .src--cloud { background: #dcf5e8; color: #0b7a47; }
 .lab__main { width: min(1280px, 100% - var(--gutter) * 2); margin: 0 auto; padding: 28px 0 80px; display: grid; gap: 20px; }
 
 .controls, .panel, .aimd, .results, .history, .inspector { background: #fff; border: 1px solid var(--line); border-radius: var(--radius) 4px var(--radius) 4px; }
