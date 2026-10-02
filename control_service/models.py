@@ -4,14 +4,14 @@ from .config import ROOT, Settings, native_context
 
 
 def discover(settings: Settings) -> dict:
+    if settings.mock:
+        return {"mock-model": "mock"}
     found = {}
     if settings.models_dir.is_dir():
         for child in sorted(settings.models_dir.iterdir()):
             if child.is_dir() and (child / "config.json").exists():
                 found[child.name] = str(child)
     found.update(settings.explicit_models)
-    if settings.mock and not found:
-        found["mock-model"] = "mock"
     return found
 
 
