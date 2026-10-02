@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en" class="antialiased h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Velocity — High-Performance LLM Scheduling Engine</title>
+  
+  <!-- Exact Original Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            display: ['"Instrument Serif"', 'serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+            handwriting: ['"Caveat"', 'cursive'],
+          },
+          colors: {
+            cream: '#f5f4f2',
+            ink: '#0a0a0a',
+            brand: '#ff6b00',
+            skybg: '#8ec6ee'
+          },
+          animation: {
+            ticker: 'ticker 30s linear infinite',
+          },
+          keyframes: {
+            ticker: {
+              '0%': { transform: 'translateX(0)' },
+              '100%': { transform: 'translateX(-50%)' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+  
+  <!-- GSAP + Lenis (scroll animation, mirrors main frontend's motion system) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lenis@1.1.14/dist/lenis.min.js"></script>
+
+  <style>
+    .nav-glass {
+      background: rgba(255, 255, 255, 0.50);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    /* Scroll-reveal baseline (GSAP sets/animates these inline; this is just a no-JS fallback) */
+    [data-reveal] { opacity: 1; }
+    html.lenis, html.lenis body { height: auto; }
+    .lenis.lenis-smooth { scroll-behavior: auto; }
+
+    /* Fancy modern number styling */
+    .num-fancy {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.02em;
+      background: linear-gradient(180deg, #171717 0%, #525252 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .num-fancy--brand {
+      background: linear-gradient(135deg, #ff6b00 0%, #e05e00 60%, #0a0a0a 120%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    /* Hide scrollbar on the hero command box, keep it scrollable */
+    .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+
+    /* Scroll progress bar */
+    #scrollProgress { position: fixed; top: 0; left: 0; height: 3px; width: 100%; transform: scaleX(0); transform-origin: left; z-index: 60; background: linear-gradient(90deg, #ff6b00, #c9a6ff); pointer-events: none; }
+
+    /* Floating gradient orbs (parallax background) */
+    .orb { position: absolute; border-radius: 9999px; filter: blur(60px); pointer-events: none; z-index: 0; }
+
+    /* Magnetic tilt cards */
+    .tilt-card { transform-style: preserve-3d; will-change: transform; transition: box-shadow .3s; }
+
+    /* Scramble text */
+    .scramble { display: inline-block; }
+  </style>
+</head>
+<body class="flex min-h-full flex-col bg-cream text-ink font-sans selection:bg-brand selection:text-white">
+  <div id="scrollProgress"></div>
+
+  <!-- ===== HEADER ===== -->
+  <header class="fixed inset-x-0 top-0 z-50 px-4 pt-4 sm:px-6">
+    <div class="mx-auto flex max-w-7xl items-center justify-between gap-4">
+      <div class="nav-glass flex h-13 items-center rounded-2xl px-4 py-2 sm:px-5 border border-white/40">
+        <a aria-label="Velocity home" class="flex items-center group" href="#">
+          <span class="inline-flex items-center select-none">
+            <img src="logo.png" alt="Velocity logo" width="34" height="34" class="h-[34px] w-auto object-contain shadow-sm transition-transform duration-200 group-hover:scale-110" />
+          </span>
+        </a>
+      </div>
+
+      <div class="relative hidden lg:flex items-center lg:translate-x-6">
+        <nav aria-label="Primary" class="nav-glass flex h-13 items-center gap-3 rounded-full pr-2 pl-4 py-1.5 border border-white/40">
+          <div class="flex items-center gap-0.5">
+            <a class="rounded-full px-2.5 py-1.5 text-sm font-semibold text-neutral-600 transition hover:bg-black/5 hover:text-black" href="#features">Features</a>
+            <a class="rounded-full px-2.5 py-1.5 text-sm font-semibold text-neutral-600 transition hover:bg-black/5 hover:text-black" href="#">Benchmarks</a>
+            <a class="rounded-full px-2.5 py-1.5 text-sm font-semibold text-neutral-600 transition hover:bg-black/5 hover:text-black" href="#">Docs</a>
+            <a class="rounded-full px-2.5 py-1.5 text-sm font-semibold text-neutral-600 transition hover:bg-black/5 hover:text-black" href="#">About</a>
+            <a class="rounded-full px-2.5 py-1.5 text-sm font-semibold text-neutral-600 transition hover:bg-black/5 hover:text-black" href="#">Changelog</a>
+          </div>
+          <div class="flex items-center gap-2">
+            <a href="#" class="inline-flex h-9 items-center gap-2 rounded-full border border-white/10 bg-gradient-to-b from-[#242424] to-[#0c0c0c] px-3.5 text-xs font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_2px_6px_rgba(0,0,0,0.22)] transition-all hover:border-white/20 hover:brightness-110 active:scale-[0.98]">
+              <svg width="17" height="17" fill="currentColor" viewBox="0 0 256 256"><path d="M216,104v8a56.06,56.06,0,0,1-48.44,55.47A39.8,39.8,0,0,1,176,192v40a8,8,0,0,1-8,8H104a8,8,0,0,1-8-8V216H72a40,40,0,0,1-40-40A24,24,0,0,0,8,152a8,8,0,0,1,0-16,40,40,0,0,1,40,40,24,24,0,0,0,24,24H96v-8a39.8,39.8,0,0,1,8.44-24.53A56.06,56.06,0,0,1,56,112v-8a58.14,58.14,0,0,1,7.69-28.32A59.78,59.78,0,0,1,69.07,28,8,8,0,0,1,76,24a59.75,59.75,0,0,1,48,24h24a59.75,59.75,0,0,1,48-24,8,8,0,0,1,6.93,4,59.74,59.74,0,0,1,5.37,47.68A58,58,0,0,1,216,104Z"></path></svg>
+              <span class="tabular-nums">12</span>
+              <svg width="13" height="13" fill="#fbbf24" viewBox="0 0 256 256"><path d="M234.29,114.85l-45,38.83L203,211.75a16.4,16.4,0,0,1-24.5,17.82L128,198.49,77.47,229.57A16.4,16.4,0,0,1,53,211.75l13.76-58.07-45-38.83A16.46,16.46,0,0,1,31.08,86l59-4.76,22.76-55.08a16.36,16.36,0,0,1,30.27,0l22.75,55.08,59,4.76a16.46,16.46,0,0,1,9.37,28.86Z"></path></svg>
+            </a>
+          </div>
+        </nav>
+        <a href="#" class="group absolute top-[calc(100%+8px)] right-6 hidden items-center gap-1.5 select-none transition-all duration-200 hover:-translate-y-0.5 active:scale-95 lg:flex xl:right-8">
+          <span class="font-handwriting -rotate-6 text-[25px] font-bold tracking-tight text-ink transition-colors duration-200 group-hover:text-brand whitespace-nowrap">star on Github</span>
+          <svg width="46" height="34" viewBox="0 0 46 34" fill="none" class="-rotate-2 text-ink transition-all duration-200 group-hover:text-brand group-hover:scale-105 shrink-0"><path d="M 3 28 C 11 30 21 26 28 18 C 33 12 37 6 41 2" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M 31 5 C 35 3.5 38.5 2.5 41 2 C 40.5 6.5 39 11.5 36 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </a>
+      </div>
+
+      <div class="nav-glass flex h-13 items-center gap-2 rounded-2xl px-2.5 lg:hidden py-1 border border-white/40">
+        <a href="#" class="inline-flex h-9 items-center gap-1.5 rounded-xl border border-white/10 bg-gradient-to-b from-[#242424] to-[#0c0c0c] px-3 text-xs font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]">
+          <svg width="16" height="16" fill="currentColor" viewBox="0 0 256 256"><path d="M216,104v8..."></path></svg>
+          <span class="tabular-nums">12</span>
+        </a>
+        <button class="inline-flex h-10 w-10 items-center justify-center rounded-xl text-neutral-800 transition hover:bg-black/5 active:scale-95">
+          <svg width="20" height="20" fill="currentColor" viewBox="0 0 256 256"><path d="M224,128a8,8,0,0,1-8,8H40a8,8,0,0,1,0-16H216A8,8,0,0,1,224,128ZM40,72H216a8,8,0,0,0,0-16H40a8,8,0,0,0,0,16ZM216,184H40a8,8,0,0,0,0,16H216a8,8,0,0,0,0-16Z"></path></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1">
+    <!-- ===== HERO ===== -->
+    <section class="relative flex min-h-[100dvh] flex-col overflow-hidden bg-skybg">
+      <div class="absolute inset-0 z-0" aria-hidden="true">
+        <img src="background.avif" alt="" class="absolute inset-0 w-full h-full object-cover object-center z-0" aria-hidden="true" />
+      </div>
+      
+      <div class="relative z-10 flex flex-1 flex-col items-center justify-center px-4 pt-24 pb-8 text-center sm:px-6">
+        <div>
+          <a href="#features" class="inline-flex items-center gap-2.5 py-1 pr-4 pl-1 text-sm font-medium text-ink bg-white/20 rounded-full backdrop-blur-sm border border-white/30">
+            <span class="rounded-full bg-ink px-2.5 py-1 text-[11px] font-bold tracking-wide text-white uppercase">Open source</span>
+            <span>LLM Scheduling Engine</span>
+          </a>
+        </div>
+        
+        <h1 class="font-display mt-7 text-5xl leading-[1.05] tracking-tight text-ink sm:text-6xl md:text-7xl lg:text-8xl">
+          The essential<span class="block pb-1">LLM scheduler.</span>
+        </h1>
+        
+        <p class="mx-auto mt-5 max-w-[48ch] text-[17px] leading-relaxed text-neutral-800 sm:text-lg">
+          High-performance inference engine featuring adaptive batching, priority queues, admission control, and dynamic load handling for models like Qwen, StableLM, and TinyLlama.
+        </p>
+        
+        <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
+          <a href="#features" class="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full font-bold transition-all bg-ink text-white hover:bg-[#1c1917] shadow-[0_10px_24px_-10px_rgba(10,10,10,0.5)] h-12 px-7 text-[15px] active:scale-95">Explore Engine</a>
+          <a href="#docs" class="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full font-bold transition-all border text-ink h-12 px-7 text-[15px] border-white/60 bg-white/50 backdrop-blur-md hover:border-white hover:bg-white/70 active:scale-95">Read the docs</a>
+        </div>
+        
+        <div class="mx-auto mt-10 w-full min-w-0 max-w-xl">
+          <div class="w-full text-center">
+            <div class="flex min-w-0 items-center gap-3 py-2 pr-2 pl-5 bg-white/60 backdrop-blur-md border border-white/40 rounded-full shadow-sm">
+              <span class="shrink-0 font-mono text-sm text-brand font-bold select-none">$</span>
+              <code class="no-scrollbar min-w-0 flex-1 overflow-x-auto text-left font-mono text-[13px] whitespace-nowrap text-ink sm:text-[15px] font-medium">git clone https://github.com/VelocityLLM/VelocityLLM.git</code>
+              <button class="copy-btn inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full transition bg-ink text-white hover:bg-neutral-800 active:scale-95" aria-label="Copy install command">
+                <svg width="17" height="17" fill="currentColor" viewBox="0 0 256 256"><path d="M216,40V168H168V88H88V40Z" opacity="0.2"></path><path d="M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z"></path></svg>
+              </button>
+            </div>
+            <div class="mt-3 inline-flex flex-wrap items-center justify-center gap-1 p-1 rounded-full bg-white/40 backdrop-blur-md border border-white/30" role="group">
+              <button class="pm-btn cursor-pointer rounded-full px-3.5 py-1.5 font-mono text-xs font-bold transition text-ink hover:bg-white/50">pip</button>
+              <button class="pm-btn cursor-pointer rounded-full px-3.5 py-1.5 font-mono text-xs font-bold transition bg-ink text-white active">git</button>
+              <button class="pm-btn cursor-pointer rounded-full px-3.5 py-1.5 font-mono text-xs font-bold transition text-ink hover:bg-white/50">docker</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- TICKER -->
+      <div class="relative z-20 w-full shrink-0 overflow-hidden border-t border-white/10 bg-ink py-3.5">
+        <div class="flex w-max animate-ticker items-center gap-8 pr-8" id="tickerContainer">
+          <!-- Filled by JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== PROBLEM SCENE (pinned, scroll-scrubbed) ===== -->
+    <section id="problem" class="problem relative bg-cream">
+      <div class="problem__sticky flex min-h-screen flex-col justify-center overflow-hidden px-4 py-20 sm:px-6">
+        <div class="mx-auto grid w-full max-w-6xl gap-12 lg:grid-cols-2 lg:items-center">
+          <div class="problem__beats relative h-[180px] sm:h-[150px]">
+            <p class="font-mono text-[11px] font-bold tracking-[0.18em] text-brand uppercase">The problem</p>
+            <div class="beat absolute inset-0 top-6">
+              <h2 class="font-display text-4xl tracking-tight sm:text-5xl">Traffic is never steady.</h2>
+              <p class="mt-4 max-w-[46ch] leading-relaxed text-neutral-600 font-medium">Real users arrive in waves. A batch size picked in advance is right for one moment and wrong for the next.</p>
+            </div>
+            <div class="beat absolute inset-0 top-6 opacity-0">
+              <h2 class="font-display text-4xl tracking-tight sm:text-5xl">A fixed batch cannot bend.</h2>
+              <p class="mt-4 max-w-[46ch] leading-relaxed text-neutral-600 font-medium">Static batching serves a set number at a time and lets the rest queue. Latency climbs and deadlines slip.</p>
+            </div>
+            <div class="beat absolute inset-0 top-6 opacity-0">
+              <h2 class="font-display text-4xl tracking-tight sm:text-5xl">Then the GPU runs out of room.</h2>
+              <p class="mt-4 max-w-[46ch] leading-relaxed text-neutral-600 font-medium">Nothing tells the scheduler to stop. Memory fills, requests fail and the whole server goes down with them.</p>
+            </div>
+          </div>
+
+          <div class="ps rounded-2xl border border-neutral-900/10 bg-white p-6 shadow-[0_12px_30px_-10px_rgba(15,15,15,0.12)]">
+            <div class="flex items-center justify-between font-mono text-xs font-bold text-neutral-500">
+              <span>Static scheduler</span><span>batch size 8</span>
+            </div>
+            <div class="ps__slots mt-4 grid grid-cols-8 gap-1.5" id="psSlots"></div>
+            <div class="mt-5 flex items-center justify-between text-sm font-bold text-neutral-700">
+              <span>Waiting</span><b class="ps__count font-mono text-brand" id="psCount">0</b>
+            </div>
+            <div class="ps__queue mt-2 flex flex-wrap gap-1.5" id="psQueue"></div>
+            <div class="mt-5 text-sm font-bold text-neutral-700">GPU memory</div>
+            <div class="mt-2 h-3 w-full overflow-hidden rounded-full bg-neutral-100">
+              <div class="ps__fill h-full origin-left rounded-full bg-emerald-500" id="psFill" style="transform:scaleX(0)"></div>
+            </div>
+            <div class="ps__stamp mt-4 inline-block rounded-md border-2 border-red-600 px-3 py-1 font-mono text-xs font-black uppercase tracking-wide text-red-600 opacity-0" id="psStamp">Out of memory</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== FEATURES MARQUEE LOOP ===== -->
+    <div class="border-y border-neutral-900/10 bg-ink py-4 overflow-hidden" aria-hidden="true">
+      <div class="flex w-max items-center gap-10 animate-ticker" id="moduleTicker"></div>
+    </div>
+
+    <!-- ===== FEATURES SECTION ===== -->
+    <section id="features" class="relative mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:py-24 overflow-hidden">
+      <div class="orb h-72 w-72 bg-[#c9a6ff]/25 -left-20 top-10" id="orbFeatures"></div>
+      <div class="relative grid gap-10 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-16">
+        <div class="lg:sticky lg:top-28 lg:self-start" data-reveal>
+          <p class="kicker font-mono text-[11px] font-bold tracking-[0.18em] text-brand uppercase">Under the hood</p>
+          <h2 class="font-display mt-2 text-4xl tracking-tight sm:text-5xl scramble" data-scramble>Five core engine modules.</h2>
+          <p class="mt-4 max-w-[34ch] leading-relaxed text-neutral-600 font-medium">Built for high-throughput inference. Explore the internal scheduling policies that keep your GPU utilized and SLA metrics met.</p>
+        </div>
+        
+        <ul class="relative border-t border-neutral-900/15" id="featureList">
+          <!-- Filled by JS -->
+        </ul>
+      </div>
+    </section>
+
+    <!-- ===== COMPARE SECTION ===== -->
+    <div class="border-t border-neutral-900/10">
+      <section id="compareSection" class="relative mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:py-24 overflow-hidden">
+        <div class="orb h-80 w-80 bg-brand/15 right-0 -top-10" id="orbCompare"></div>
+        <div class="relative grid grid-cols-1 gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
+          <div data-reveal>
+            <p class="font-mono text-[11px] font-bold tracking-[0.18em] text-brand uppercase">Same load, shorter tail</p>
+            <h2 class="font-display mt-2 text-4xl tracking-tight text-balance sm:text-5xl">Standard inference fails under load.<br/><em class="italic">Velocity scales.</em></h2>
+            <p class="mt-4 max-w-[48ch] leading-relaxed text-neutral-600 font-medium">Standard LLM backends suffer from OOMs and blocked queues during traffic spikes. See what changes when Velocity's scheduler takes over.</p>
+            <div class="mt-6 inline-flex rounded-full border border-neutral-200 bg-white p-1 shadow-sm" id="compareToggle">
+              <button data-mode="standard" class="toggle-btn cursor-pointer rounded-full px-5 py-2.5 text-sm font-bold transition bg-ink text-white shadow active">Standard Backend</button>
+              <button data-mode="velocity" class="toggle-btn cursor-pointer rounded-full px-5 py-2.5 text-sm font-bold transition text-neutral-500 hover:text-black">With Velocity</button>
+            </div>
+          </div>
+          
+          <ul class="tilt-card overflow-hidden rounded-2xl border border-neutral-200/80 bg-white shadow-[0_6px_18px_-6px_rgba(15,15,15,0.08)]" id="compareList">
+            <!-- Filled by JS -->
+          </ul>
+        </div>
+      </section>
+    </div>
+
+    <!-- ===== ENGINE STEP-RAIL (pinned, scroll-scrubbed) ===== -->
+    <section id="engine" class="engine relative border-t border-neutral-900/10 bg-white">
+      <div class="engine__sticky flex min-h-screen flex-col justify-center px-4 py-16 sm:px-6">
+        <div class="mx-auto w-full max-w-5xl">
+          <p class="font-mono text-[11px] font-bold tracking-[0.18em] text-brand uppercase">Under the hood</p>
+          <h2 class="font-display mt-2 text-4xl tracking-tight sm:text-5xl">One request, five decisions.</h2>
+
+          <div class="rail relative mt-14 flex justify-between" id="engineRail">
+            <div class="absolute left-0 right-0 top-[18px] h-[2px] bg-neutral-200"></div>
+            <div class="absolute left-0 top-[18px] h-[2px] origin-left bg-brand" id="railFill" style="width:0%"></div>
+          </div>
+
+          <div class="panel mt-10 min-h-[130px] rounded-2xl border border-neutral-200/80 bg-cream p-6 sm:p-8" id="enginePanel"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== RESULTS STRIP ===== -->
+    <div class="border-t border-neutral-900/10 bg-white">
+      <section class="relative mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:py-24 overflow-hidden">
+        <div class="orb h-72 w-72 bg-[#8b6fe0]/15 -right-16 bottom-0" id="orbResults"></div>
+        <p class="relative font-mono text-[11px] font-bold tracking-[0.18em] text-brand uppercase" data-reveal>Results</p>
+        <h2 class="relative font-display mt-2 text-4xl tracking-tight sm:text-5xl scramble" data-scramble data-reveal>Same load. Shorter tail.</h2>
+        <div class="relative mt-10 grid grid-cols-1 gap-8 sm:grid-cols-3" id="statsGrid"></div>
+        <div class="tilt-card relative mt-12 overflow-hidden rounded-2xl border border-neutral-200/80 bg-white shadow-[0_6px_18px_-6px_rgba(15,15,15,0.08)]" id="benchTable" data-reveal></div>
+      </section>
+    </div>
+  </main>
+
+  <!-- ===== FOOTER ===== -->
+  <footer class="relative overflow-hidden bg-cream text-neutral-600">
+    <div aria-hidden="true" class="pointer-events-none absolute inset-x-0 bottom-8 z-0 flex select-none items-center justify-center px-4 sm:bottom-12 translate-y-[80px]">
+      <img src="logo.png" alt="" class="h-[9vw] w-auto max-h-[110px] opacity-[0.14] grayscale object-contain" />
+    </div>
+    
+    <div class="relative z-10 mx-auto max-w-6xl px-4 pt-16 pb-16 sm:px-6 sm:pt-20 sm:pb-24">
+      <div class="grid grid-cols-1 gap-12 lg:grid-cols-[1.1fr_1.9fr] lg:gap-16 items-start">
+        <div class="flex flex-col items-start" data-reveal>
+          <a aria-label="Velocity home" class="inline-flex items-center" href="#">
+            <img src="logo.png" alt="Velocity logo" width="32" height="32" class="h-[32px] w-auto object-contain" />
+          </a>
+        </div>
+
+        <div class="grid grid-cols-2 gap-8 sm:grid-cols-3 sm:gap-10" data-reveal>
+          <nav aria-label="Modules">
+            <p class="font-mono text-[11px] font-bold tracking-[0.18em] text-neutral-500 uppercase">Modules</p>
+            <ul class="mt-4 space-y-3 text-sm font-semibold" id="footerFeatures">
+              <!-- Filled by JS -->
+            </ul>
+          </nav>
+          <nav aria-label="Explore">
+            <p class="font-mono text-[11px] font-bold tracking-[0.18em] text-neutral-500 uppercase">Explore</p>
+            <ul class="mt-4 space-y-3 text-sm font-semibold">
+              <li><a class="text-neutral-500 transition hover:text-ink" href="#">Architecture</a></li>
+              <li><a class="text-neutral-500 transition hover:text-ink" href="#">Benchmarks</a></li>
+              <li><a class="text-neutral-500 transition hover:text-ink" href="#">Traffic Patterns</a></li>
+              <li><a class="text-neutral-500 transition hover:text-ink" href="#">Test Suite</a></li>
+              <li><a class="text-neutral-500 transition hover:text-ink" href="#">PRD</a></li>
+            </ul>
+          </nav>
+          <nav aria-label="Project">
+            <p class="font-mono text-[11px] font-bold tracking-[0.18em] text-neutral-500 uppercase">Project</p>
+            <ul class="mt-4 space-y-3 text-sm font-semibold">
+              <li><a class="text-neutral-500 transition hover:text-ink" href="#">GitHub</a></li>
+              <li><a class="text-neutral-500 transition hover:text-ink" href="#">Issues</a></li>
+              <li><span class="text-neutral-500 font-medium">MIT License</span></li>
+            </ul>
+          </nav>
+        </div>
+      </div>
+    </div>
+    
+    <div class="relative z-10 border-t border-neutral-900/10">
+      <div class="mx-auto flex max-w-6xl flex-col items-start justify-between gap-3 px-4 py-5 font-mono text-xs text-neutral-500 sm:flex-row sm:items-center sm:px-6">
+        <p>MIT License · Open source</p>
+        <div class="flex flex-wrap items-center gap-3">
+          <a href="#" class="transition hover:text-ink">github.com/VelocityLLM</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Build Ticker with LLMs
+    const models = ["Qwen", "StableLM", "TinyLlama", "Llama 3", "Mistral", "Gemma", "Phi-3", "Mixtral", "Falcon", "Vicuna"];
+    const tickerContainer = document.getElementById('tickerContainer');
+    const modelHTML = models.map(m => `<span class="inline-flex items-center gap-2 text-sm font-bold whitespace-nowrap text-white"><span class="text-white/50 text-[10px]">●</span>${m}</span>`).join('');
+    tickerContainer.innerHTML = modelHTML + modelHTML + modelHTML + modelHTML;
+
+    // Build Features Grid based on VelocityLLM
+    const features = [
+      { id: "adaptive-controller", title: "adaptive_controller", tag: "Dynamic Batching & Adjustments", color: "#f59e0b", desc: "Dynamically adjusts batch sizes and inference parameters in real-time based on current GPU load and request frequency." },
+      { id: "admission-control", title: "admission_control", tag: "OOM Protection Engine", color: "#ff6b00", desc: "Prevents Out-Of-Memory crashes by intelligently gating and managing incoming requests during severe traffic spikes." },
+      { id: "priority-queue", title: "priority_queue", tag: "SLA-Aware Request Scheduling", color: "#6366f1", desc: "Ensures critical or low-latency requests bypass the standard FIFO queue to guarantee service level agreements." },
+      { id: "gpu-monitor", title: "gpu_monitor", tag: "Hardware Telemetry", color: "#10b981", desc: "Provides real-time hardware telemetry and memory tracking to maximize resource utilization without hitting thermal bottlenecks." },
+      { id: "load-generator", title: "load_generator", tag: "Traffic Pattern Testing", color: "#0ea5e9", desc: "Built-in tools for generating burst, poisson, and mixed traffic patterns to rigorously validate scheduler robustness." }
+    ];
+
+    const arrowSvg = `<svg width="16" height="16" fill="currentColor" viewBox="0 0 256 256"><path d="M204,64V168a12,12,0,0,1-24,0V93L72.49,200.49a12,12,0,0,1-17-17L163,76H88a12,12,0,0,1,0-24H192A12,12,0,0,1,204,64Z"></path></svg>`;
+
+    const featureList = document.getElementById('featureList');
+    features.forEach(f => {
+      const li = document.createElement('li');
+      li.innerHTML = `
+        <div data-reveal role="button" tabindex="0" class="group grid w-full cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-4 gap-y-3 border-b border-neutral-900/15 px-2 py-6 text-left transition-colors hover:bg-white/55 sm:grid-cols-[auto_minmax(150px,0.55fr)_minmax(0,1fr)_auto] sm:items-center sm:px-4 sm:py-7">
+          <span class="inline-flex h-11 w-11 items-center justify-center rounded-xl border" style="color:${f.color};background-color:${f.color}12;border-color:${f.color}2e">
+            <div class="w-2.5 h-2.5 rounded-full" style="background:${f.color}"></div>
+          </span>
+          <span>
+            <span class="font-display block text-[26px] leading-none tracking-tight">${f.title}</span>
+            <span class="mt-2 block text-xs font-bold" style="color:${f.color}">${f.tag}</span>
+          </span>
+          <span class="col-start-2 text-sm leading-relaxed text-neutral-600 sm:col-start-auto sm:text-[15px] font-medium">${f.desc}</span>
+          <a class="col-start-3 row-start-1 inline-flex h-9 w-9 items-center justify-center rounded-full border border-neutral-900/15 bg-white transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 hover:border-black hover:bg-ink hover:text-white sm:col-start-auto sm:row-start-auto" href="#">${arrowSvg}</a>
+        </div>
+      `;
+      featureList.appendChild(li);
+    });
+
+    // Build Footer Features
+    const footerFeatures = document.getElementById('footerFeatures');
+    features.forEach(f => {
+      const li = document.createElement('li');
+      li.innerHTML = `
+        <a class="group inline-flex items-center gap-2.5 text-neutral-400 transition hover:text-white" href="#">
+          <span class="h-1.5 w-1.5 shrink-0 rounded-full transition-transform duration-200 group-hover:scale-125" style="background-color:${f.color};box-shadow:0 0 8px ${f.color}80"></span>
+          <span>${f.title}</span>
+        </a>
+      `;
+      footerFeatures.appendChild(li);
+    });
+
+    // Compare toggle state helper (used by click handlers + scroll auto-switch)
+    function setCompareMode(mode) {
+      document.querySelectorAll('#compareToggle .toggle-btn').forEach(b => {
+        const on = b.dataset.mode === mode;
+        b.classList.toggle('bg-ink', on);
+        b.classList.toggle('text-white', on);
+        b.classList.toggle('shadow', on);
+        b.classList.toggle('active', on);
+        b.classList.toggle('text-neutral-500', !on);
+      });
+    }
+
+    // Build Compare List
+    const checkSvg = `<svg width="18" height="18" fill="currentColor" viewBox="0 0 256 256"><path d="M197.58,129.06,146,110l-19-51.62a15.92,15.92,0,0,0-29.88,0L78,110l-51.62,19a15.92,15.92,0,0,0,0,29.88L78,178l19,51.62a15.92,15.92,0,0,0,29.88,0L146,178l51.62-19a15.92,15.92,0,0,0,0-29.88Z"></path></svg>`;
+    const compareData = [
+      ["Adaptive, load-aware batching", "Replaces static batching to maximize throughput without latency spikes."],
+      ["Strict admission control", "Prevents memory fragmentation and OOM crashes during sudden burst traffic."],
+      ["Priority-based request scheduling", "Replaces standard FIFO to prioritize critical generation requests."],
+      ["Active GPU memory monitoring", "Monitors thermal and VRAM states directly via the backend interface."],
+      ["Guaranteed SLAs under load", "Tested against burst, poisson, and mixed generation patterns."]
+    ];
+    
+    const compareList = document.getElementById('compareList');
+    compareData.forEach(([title, sub], i) => {
+      const li = document.createElement('li');
+      li.setAttribute('data-reveal', '');
+      li.className = `flex gap-4 p-5 sm:p-6 ${i !== 0 ? 'border-t border-neutral-900/10' : ''}`;
+      li.innerHTML = `
+        <span class="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white bg-emerald-500 shadow-sm">${checkSvg}</span>
+        <span>
+          <span class="block font-bold text-ink">${title}</span>
+          <span class="mt-1 block text-sm leading-relaxed text-neutral-600 font-medium">${sub}</span>
+        </span>
+      `;
+      compareList.appendChild(li);
+    });
+
+    // Interactions
+    document.querySelector('.copy-btn').addEventListener('click', () => {
+      navigator.clipboard?.writeText('git clone https://github.com/VelocityLLM/VelocityLLM.git').catch(()=>{});
+    });
+
+    document.querySelectorAll('.pm-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.pm-btn').forEach(b => {
+          b.classList.remove('bg-ink', 'text-white', 'active');
+          b.classList.add('text-ink');
+        });
+        btn.classList.add('bg-ink', 'text-white', 'active');
+        btn.classList.remove('text-ink');
+      });
+    });
+
+    document.querySelectorAll('#compareToggle .toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => setCompareMode(btn.dataset.mode));
+    });
+
+    // ===== Results strip: stat cards + benchmark bars (data from VelocityLLM docs) =====
+    const stats = [
+      { big: '517%', label: 'peak throughput gain, Qwen2.5-1.5B saturation test' },
+      { big: '100%', label: 'SLA compliance on every model, every traffic pattern' },
+      { big: '4', label: 'independent models, one scheduler, no code changes' },
+    ];
+    const statsGrid = document.getElementById('statsGrid');
+    stats.forEach(s => {
+      const div = document.createElement('div');
+      div.setAttribute('data-reveal', '');
+      div.innerHTML = `
+        <p class="num-fancy num-fancy--brand text-5xl sm:text-6xl"><span class="counter" data-end="${parseFloat(s.big)}" data-suffix="${s.big.replace(/[0-9.]/g,'')}">0${s.big.replace(/[0-9.]/g,'')}</span></p>
+        <p class="mt-2 text-sm leading-relaxed text-neutral-600 font-medium">${s.label}</p>
+      `;
+      statsGrid.appendChild(div);
+    });
+
+    const benchData = [
+      { name: 'Qwen2.5-1.5B', size: '1.5B', staticP99: 1.0, dynP99: 0.088, change: -91.2 },
+      { name: 'StableLM-2-1.6B', size: '1.6B', staticP99: 1.0, dynP99: 0.671, change: -32.9 },
+      { name: 'Llama-3.2-1B', size: '1B', staticP99: 1.0, dynP99: 0.754, change: -24.6 },
+      { name: 'TinyLlama-1.1B', size: '1.1B', staticP99: 1.0, dynP99: 0.851, change: -14.9 },
+    ];
+    const benchTable = document.getElementById('benchTable');
+    benchData.forEach((m, i) => {
+      const row = document.createElement('div');
+      row.className = `grid grid-cols-1 gap-4 p-5 sm:grid-cols-[180px_1fr_90px] sm:items-center sm:p-6 ${i !== 0 ? 'border-t border-neutral-900/10' : ''}`;
+      row.innerHTML = `
+        <div><b class="text-ink">${m.name}</b> <span class="font-mono text-xs text-neutral-500">${m.size}</span></div>
+        <div class="space-y-2">
+          <div class="flex items-center gap-2">
+            <div class="h-2.5 flex-1 overflow-hidden rounded-full bg-neutral-100"><i class="block h-full rounded-full bg-neutral-300" data-bar style="width:0%" data-target="${m.staticP99 * 100}%"></i></div>
+            <span class="w-20 shrink-0 font-mono text-xs text-neutral-500">static</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <div class="h-2.5 flex-1 overflow-hidden rounded-full bg-neutral-100"><i class="block h-full rounded-full bg-brand" data-bar style="width:0%" data-target="${m.dynP99 * 100}%"></i></div>
+            <span class="w-20 shrink-0 font-mono text-xs text-neutral-500">dynamic</span>
+          </div>
+        </div>
+        <div class="text-right"><b class="num-fancy text-lg" style="background:none;-webkit-text-fill-color:initial;color:#059669;font-weight:800;">${m.change}%</b><p class="text-[11px] text-neutral-400">p99 latency</p></div>
+      `;
+      benchTable.appendChild(row);
+    });
+
+    // ===== Module ticker (loops forever, CSS 'ticker' keyframe) =====
+    const moduleNames = ['adaptive_controller', 'admission_control', 'priority_queue', 'gpu_monitor', 'load_generator'];
+    const dotHtml = n => n.map(m => `<span class="inline-flex items-center gap-2 text-sm font-bold whitespace-nowrap text-white"><span class="text-brand text-[10px]">●</span>${m}</span>`).join('');
+    document.getElementById('moduleTicker').innerHTML = dotHtml(moduleNames) + dotHtml(moduleNames) + dotHtml(moduleNames) + dotHtml(moduleNames);
+
+    // ===== Problem scene: build 8 slots + 28 queue dots =====
+    const psSlots = document.getElementById('psSlots');
+    for (let i = 0; i < 8; i++) psSlots.insertAdjacentHTML('beforeend', '<i class="ps__slot h-6 rounded-md bg-neutral-100 opacity-25"></i>');
+    const psQueue = document.getElementById('psQueue');
+    for (let i = 0; i < 28; i++) psQueue.insertAdjacentHTML('beforeend', '<i class="ps__dot h-2.5 w-2.5 rounded-full bg-neutral-300 opacity-0 scale-50"></i>');
+
+    // ===== Engine rail: build 5 nodes =====
+    const stages = [
+      { name: 'Admission control', line: 'Predicts whether a request can hit its latency target before accepting it. If not, it fails fast with HTTP 429 instead of silently degrading.' },
+      { name: 'Priority queue', line: 'Anti-starvation aging ensures low-priority requests are never indefinitely delayed behind high-priority traffic.' },
+      { name: 'AIMD controller', line: 'An additive-increase/multiplicative-decrease feedback loop — the same family used in TCP congestion control — tunes the concurrency ceiling in real time.' },
+      { name: 'GPU monitor', line: 'Watches live utilization and VRAM headroom so the controller always has a true picture of available capacity.' },
+      { name: 'vLLM backend', line: 'PagedAttention + continuous batching does the actual generation — same engine, same model, just scheduled smarter.' },
+    ];
+    const railEl = document.getElementById('engineRail');
+    stages.forEach((s, i) => {
+      railEl.insertAdjacentHTML('beforeend', `
+        <div class="node relative z-10 flex flex-col items-center gap-3" data-i="${i}">
+          <span class="node__dot flex h-9 w-9 items-center justify-center rounded-full border-2 border-neutral-200 bg-white font-mono text-xs font-bold text-neutral-400 transition-colors">${i + 1}</span>
+          <span class="node__name hidden text-center text-xs font-bold text-neutral-500 sm:block">${s.name}</span>
+        </div>`);
+    });
+    const enginePanel = document.getElementById('enginePanel');
+    function setEngineStage(i) {
+      const s = stages[i];
+      enginePanel.innerHTML = `
+        <p class="font-mono text-xs font-bold text-brand">${String(i + 1).padStart(2, '0')} / ${String(stages.length).padStart(2, '0')}</p>
+        <h3 class="font-display mt-2 text-2xl tracking-tight">${s.name}</h3>
+        <p class="mt-3 max-w-[60ch] leading-relaxed text-neutral-600 font-medium">${s.line}</p>`;
+      railEl.querySelectorAll('.node').forEach((n, idx) => {
+        const dot = n.querySelector('.node__dot');
+        const nm = n.querySelector('.node__name');
+        if (idx === i) { dot.className = 'node__dot flex h-9 w-9 items-center justify-center rounded-full border-2 border-brand bg-brand font-mono text-xs font-bold text-white transition-colors scale-110'; nm.classList.add('text-ink'); }
+        else if (idx < i) { dot.className = 'node__dot flex h-9 w-9 items-center justify-center rounded-full border-2 border-brand bg-white font-mono text-xs font-bold text-brand transition-colors'; nm.classList.remove('text-ink'); }
+        else { dot.className = 'node__dot flex h-9 w-9 items-center justify-center rounded-full border-2 border-neutral-200 bg-white font-mono text-xs font-bold text-neutral-400 transition-colors'; nm.classList.remove('text-ink'); }
+      });
+    }
+    setEngineStage(0);
+
+    // ===== GSAP + Lenis scroll animation (mirrors the React frontend's motion system) =====
+    (function () {
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (typeof gsap === 'undefined') return;
+      gsap.registerPlugin(ScrollTrigger);
+
+      if (!reduced && window.Lenis) {
+        const lenis = new Lenis({ lerp: 0.1, wheelMultiplier: 1 });
+        lenis.on('scroll', ScrollTrigger.update);
+        gsap.ticker.add((time) => lenis.raf(time * 1000));
+        gsap.ticker.lagSmoothing(0);
+      }
+
+      // Fade-up stagger reveals
+      const items = gsap.utils.toArray('[data-reveal]');
+      if (items.length) {
+        gsap.set(items, { opacity: 0, y: 28 });
+        ScrollTrigger.batch(items, {
+          start: 'top 90%',
+          once: true,
+          onEnter: (batch) => gsap.to(batch, { opacity: 1, y: 0, duration: 0.9, ease: 'power3.out', stagger: 0.08 }),
+        });
+      }
+
+      // Benchmark bar fill
+      gsap.utils.toArray('[data-bar]').forEach((bar) => {
+        gsap.to(bar, { width: bar.dataset.target, duration: 1, ease: 'power2.out', scrollTrigger: { trigger: bar, start: 'top 92%', once: true } });
+      });
+
+      // Animated counters
+      gsap.utils.toArray('.counter').forEach((el) => {
+        const end = parseFloat(el.dataset.end);
+        const suffix = el.dataset.suffix || '';
+        const obj = { v: 0 };
+        gsap.to(obj, {
+          v: end, duration: 1.6, ease: 'power2.out',
+          scrollTrigger: { trigger: el, start: 'top 90%', once: true },
+          onUpdate: () => { el.textContent = (Number.isInteger(end) ? Math.round(obj.v) : obj.v.toFixed(1)) + suffix; },
+        });
+      });
+
+      // Compare section: auto-toggle Standard → Velocity as you scroll through it
+      ScrollTrigger.create({
+        trigger: '#compareSection',
+        start: 'top 80%',
+        end: 'top 10%',
+        onUpdate: (self) => setCompareMode(self.progress > 0.5 ? 'velocity' : 'standard'),
+      });
+
+      if (reduced) return;
+
+      // Problem scene: pinned, scrubbed story (static scheduler filling up → OOM)
+      const problemTl = gsap.timeline({
+        defaults: { ease: 'none' },
+        scrollTrigger: { trigger: '#problem', start: 'top top', end: '+=2400', scrub: 0.6, pin: '.problem__sticky' },
+      });
+      const beats = gsap.utils.toArray('#problem .beat');
+      const dots = gsap.utils.toArray('#problem .ps__dot');
+      problemTl
+        .to('#problem .ps__slot', { opacity: 1, stagger: 0.08, duration: 0.5 }, 0)
+        .to(dots.slice(0, 8), { opacity: 1, scale: 1, stagger: 0.08, duration: 0.3 }, 0.2)
+        .to('#psFill', { scaleX: 0.4, duration: 0.8 }, 0)
+        .to({}, { onUpdate: function () { document.getElementById('psCount').textContent = Math.round(this.progress() * 8); }, duration: 0.8 }, 0.2)
+        .to(beats[0], { opacity: 0, y: -24, duration: 0.3 }, 0.9)
+        .to(beats[1], { opacity: 1, y: 0, duration: 0.4 }, 1.0)
+        .to(dots.slice(8, 28), { opacity: 1, scale: 1, stagger: 0.04, duration: 0.25 }, 1.0)
+        .to('#psFill', { scaleX: 0.85, duration: 0.9 }, 1.0)
+        .to({}, { onUpdate: function () { document.getElementById('psCount').textContent = 8 + Math.round(this.progress() * 20); }, duration: 0.9 }, 1.0)
+        .to(beats[1], { opacity: 0, y: -24, duration: 0.3 }, 1.9)
+        .to(beats[2], { opacity: 1, y: 0, duration: 0.4 }, 2.0)
+        .to('#psFill', { scaleX: 1, backgroundColor: '#d92d20', duration: 0.5 }, 2.0)
+        .to(dots, { backgroundColor: '#d92d20', opacity: 1, duration: 0.3 }, 2.1)
+        .to('#psStamp', { opacity: 1, scale: 1.05, duration: 0.25 }, 2.35)
+        .to('.ps', { x: 4, duration: 0.05, repeat: 6, yoyo: true }, 2.4);
+
+      // Engine rail: pinned, scrubbed step-through
+      const engineTl = gsap.timeline({
+        scrollTrigger: {
+          trigger: '#engine', start: 'top top', end: `+=${stages.length * 500}`, scrub: 0.6, pin: '.engine__sticky',
+          onUpdate: (self) => {
+            const i = Math.min(stages.length - 1, Math.floor(self.progress * stages.length));
+            if (i !== engineTl.lastI) { engineTl.lastI = i; setEngineStage(i); }
+            document.getElementById('railFill').style.width = (self.progress * 100) + '%';
+          },
+        },
+      });
+
+      // Scroll progress bar
+      gsap.to('#scrollProgress', { scaleX: 1, ease: 'none', scrollTrigger: { trigger: document.body, start: 'top top', end: 'bottom bottom', scrub: true } });
+
+      // Parallax floating orbs
+      ['orbFeatures', 'orbCompare', 'orbResults'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        gsap.to(el, { y: 120, x: 40, ease: 'none', scrollTrigger: { trigger: el.parentElement, start: 'top bottom', end: 'bottom top', scrub: 1 } });
+      });
+
+      // Mouse-tilt 3D cards (magnetic, aesthetic micro-interaction)
+      document.querySelectorAll('.tilt-card').forEach((card) => {
+        card.addEventListener('mousemove', (e) => {
+          const r = card.getBoundingClientRect();
+          const px = (e.clientX - r.left) / r.width - 0.5;
+          const py = (e.clientY - r.top) / r.height - 0.5;
+          gsap.to(card, { rotateY: px * 4, rotateX: py * -4, duration: 0.4, ease: 'power2.out', transformPerspective: 900 });
+        });
+        card.addEventListener('mouseleave', () => gsap.to(card, { rotateX: 0, rotateY: 0, duration: 0.6, ease: 'power3.out' }));
+      });
+
+      // Text scramble-in on scroll (decodes into the real heading as it enters view)
+      const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      document.querySelectorAll('[data-scramble]').forEach((el) => {
+        const final = el.textContent;
+        ScrollTrigger.create({
+          trigger: el, start: 'top 88%', once: true,
+          onEnter: () => {
+            const obj = { p: 0 };
+            gsap.to(obj, {
+              p: 1, duration: 1.1, ease: 'power1.inOut',
+              onUpdate: () => {
+                const n = Math.floor(obj.p * final.length);
+                el.textContent = final.split('').map((ch, i) => {
+                  if (ch === ' ') return ' ';
+                  if (i < n) return ch;
+                  return CHARS[Math.floor(Math.random() * CHARS.length)];
+                }).join('');
+              },
+              onComplete: () => { el.textContent = final; },
+            });
+          },
+        });
+      });
+
+      // Logo images and dynamically-built content can shift layout after ScrollTrigger's
+      // first measurement, which desyncs every trigger's start/end offsets — force a
+      // recalculation once everything (images, fonts) has actually finished loading.
+      window.addEventListener('load', () => ScrollTrigger.refresh());
+      setTimeout(() => ScrollTrigger.refresh(), 300);
+    })();
+  </script>
+</body>
+</html>
