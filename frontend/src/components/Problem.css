@@ -81,7 +81,7 @@
 .ps__meter {
   height: 10px;
   border-radius: 6px;
-  background: rgba(28, 23, 18, 0.08);
+  background: rgba(10, 10, 10, 0.08);
   overflow: hidden;
 }
 
@@ -97,7 +97,7 @@
   inset: 0;
   display: grid;
   place-items: center;
-  background: rgba(251, 247, 241, 0.62);
+  background: rgba(255, 255, 255, 0.62);
   color: var(--bad);
   font-size: clamp(1.1rem, 2.4vw, 1.6rem);
   letter-spacing: 0.2em;

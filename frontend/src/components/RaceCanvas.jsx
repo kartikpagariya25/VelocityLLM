@@ -3,8 +3,8 @@ import { inFlight } from '../lib/metrics'
 
 const STEPS = 160
 const PALETTE = {
-  static: { queue: '#dde1e6', run: '#8793a3', area: 'rgba(135,147,163,0.28)', line: '#6f7c8d' },
-  dynamic: { queue: '#ffd9bd', run: '#e85d00', area: 'rgba(232,93,0,0.25)', line: '#d95200' },
+  static: { queue: '#e7e7e2', run: '#8c8c86', area: 'rgba(140,140,134,0.25)', line: '#6f6f69' },
+  dynamic: { queue: '#ffe3d8', run: '#ff4d1c', area: 'rgba(255,77,28,0.22)', line: '#ff4d1c' },
 }
 
 export function maxInFlight(trace, T) {
@@ -54,7 +54,7 @@ export default function RaceCanvas({ trace, t, T, scale, variant, reference = 3 
       const y = top + i * rowH + (rowH - barH) / 2
       if (r.shed) {
         if (t >= r.end) {
-          ctx.fillStyle = '#d92d20'
+          ctx.fillStyle = '#e8384f'
           ctx.fillRect(x(0), y, Math.max(5, x(r.end) - x(0)), barH)
         }
         return
@@ -72,25 +72,25 @@ export default function RaceCanvas({ trace, t, T, scale, variant, reference = 3 
 
     ctx.font = '10px "JetBrains Mono", monospace'
     if (reference < T) {
-      ctx.strokeStyle = 'rgba(28,23,18,0.4)'
+      ctx.strokeStyle = 'rgba(10, 10, 10,0.4)'
       ctx.setLineDash([3, 4])
       ctx.beginPath()
       ctx.moveTo(x(reference), top)
       ctx.lineTo(x(reference), top + barsH)
       ctx.stroke()
       ctx.setLineDash([])
-      ctx.fillStyle = 'rgba(28,23,18,0.65)'
+      ctx.fillStyle = 'rgba(10, 10, 10,0.65)'
       ctx.fillText(`${reference} s`, x(reference) + 4, top + 10)
     }
 
-    ctx.strokeStyle = 'rgba(28,23,18,0.45)'
+    ctx.strokeStyle = 'rgba(10, 10, 10,0.45)'
     ctx.beginPath()
     ctx.moveTo(x(t), top)
     ctx.lineTo(x(t), top + barsH + 10)
     ctx.stroke()
 
     const base = top + barsH + 26 + chartH
-    ctx.fillStyle = 'rgba(28,23,18,0.55)'
+    ctx.fillStyle = 'rgba(10, 10, 10,0.55)'
     ctx.fillText('Requests on the GPU', padX, base - chartH - 6)
     ctx.beginPath()
     ctx.moveTo(x(0), base)
@@ -110,7 +110,7 @@ export default function RaceCanvas({ trace, t, T, scale, variant, reference = 3 
     ctx.stroke()
     ctx.lineWidth = 1
 
-    ctx.fillStyle = 'rgba(28,23,18,0.5)'
+    ctx.fillStyle = 'rgba(10, 10, 10,0.5)'
     ctx.fillText('0 s', padX, h - 4)
     const end = `${T.toFixed(T < 10 ? 1 : 0)} s`
     ctx.fillText(end, w - padX - ctx.measureText(end).width, h - 4)

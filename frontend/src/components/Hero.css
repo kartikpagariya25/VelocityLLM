@@ -23,8 +23,8 @@
 .hero__glow {
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, var(--bg) 8%, rgba(251, 247, 241, 0.6) 45%, transparent 75%),
-    radial-gradient(50% 50% at 72% 45%, rgba(255, 106, 0, 0.2), transparent 70%);
+  background: linear-gradient(90deg, var(--bg) 8%, rgba(255, 255, 255, 0.6) 45%, transparent 75%),
+    radial-gradient(50% 50% at 72% 45%, rgba(255, 77, 28, 0.2), transparent 70%);
 }
 
 .hero::after {
@@ -76,8 +76,8 @@
 
 @media (max-width: 760px) {
   .hero__glow {
-    background: linear-gradient(to top, var(--bg) 25%, rgba(251, 247, 241, 0.55) 60%, transparent),
-      radial-gradient(70% 40% at 60% 30%, rgba(255, 106, 0, 0.25), transparent 70%);
+    background: linear-gradient(to top, var(--bg) 25%, rgba(255, 255, 255, 0.55) 60%, transparent),
+      radial-gradient(70% 40% at 60% 30%, rgba(255, 77, 28, 0.25), transparent 70%);
   }
   .hero__foot {
     display: none;

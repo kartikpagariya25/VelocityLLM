@@ -1,5 +1,5 @@
 .race {
-  background: radial-gradient(80% 50% at 50% 0%, rgba(255, 106, 0, 0.07), transparent 70%);
+  background: radial-gradient(80% 50% at 50% 0%, rgba(255, 77, 28, 0.07), transparent 70%);
 }
 
 .race__controls {
@@ -60,8 +60,8 @@
 }
 
 .lane--dynamic {
-  border-color: rgba(255, 106, 0, 0.4);
-  box-shadow: 0 16px 60px rgba(217, 82, 0, 0.12);
+  border-color: rgba(255, 77, 28, 0.4);
+  box-shadow: 0 16px 60px rgba(255, 77, 28, 0.12);
 }
 
 .lane__head h3 {
@@ -160,7 +160,7 @@
 
 .race__verdict--on {
   opacity: 1;
-  border-color: rgba(255, 106, 0, 0.5);
+  border-color: rgba(255, 77, 28, 0.5);
 }
 
 .race__verdict span {

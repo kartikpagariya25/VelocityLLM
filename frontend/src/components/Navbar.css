@@ -4,7 +4,7 @@
   z-index: 50;
   transition: transform 0.5s var(--ease);
   backdrop-filter: blur(14px);
-  background: rgba(251, 247, 241, 0.75);
+  background: rgba(255, 255, 255, 0.75);
   border-bottom: 1px solid var(--line);
 }
 
@@ -20,6 +20,7 @@
 }
 
 .nav__brand {
+  flex: none;
   font-weight: 800;
   letter-spacing: -0.03em;
   font-size: 1.25rem;
@@ -32,6 +33,7 @@
 .nav__links {
   display: flex;
   gap: 2rem;
+  margin-left: 2.5rem;
   font-size: 0.9rem;
   color: var(--mute);
 }
@@ -70,4 +72,20 @@
   .nav__links {
     display: none;
   }
+}
+
+.nav__arena {
+  margin-left: auto;
+  margin-right: 12px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: var(--hot);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: transform 0.25s var(--ease);
+}
+
+.nav__arena:hover {
+  transform: translateY(-2px);
 }

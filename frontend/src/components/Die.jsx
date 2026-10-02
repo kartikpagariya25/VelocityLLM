@@ -3,9 +3,9 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 
 const N = 14
-const HOT = new THREE.Color('#ff6a00')
-const GOLD = new THREE.Color('#ffc34d')
-const EMBER = new THREE.Color('#3a1d0a')
+const HOT = new THREE.Color('#ff4d1c')
+const GOLD = new THREE.Color('#ff8a65')
+const EMBER = new THREE.Color('#2b2b28')
 
 function Cores() {
   const mesh = useRef()
@@ -68,11 +68,11 @@ export default function Die({ active, still }) {
       <Rig>
         <mesh position={[0, -0.12, 0]}>
           <boxGeometry args={[N + 1.2, 0.2, N + 1.2]} />
-          <meshBasicMaterial color="#1c130c" />
+          <meshBasicMaterial color="#0a0a0a" />
         </mesh>
         <mesh position={[0, -0.23, 0]}>
           <boxGeometry args={[N + 2, 0.05, N + 2]} />
-          <meshBasicMaterial color="#ff6a00" transparent opacity={0.25} />
+          <meshBasicMaterial color="#ff4d1c" transparent opacity={0.25} />
         </mesh>
         <Cores />
       </Rig>

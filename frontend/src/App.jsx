@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { startSmoothScroll, ScrollTrigger } from './lib/motion'
 import Navbar from './components/Navbar'
 import Hero from './components/Hero'
@@ -9,8 +9,9 @@ import Benchmarks from './components/Benchmarks'
 import ModelStrip from './components/ModelStrip'
 import Team from './components/Team'
 import Footer from './components/Footer'
+import Lab from './lab/Lab'
 
-export default function App() {
+function Site() {
   useEffect(() => {
     const stop = startSmoothScroll()
     document.fonts.ready.then(() => ScrollTrigger.refresh())
@@ -32,4 +33,19 @@ export default function App() {
       <Footer />
     </>
   )
+}
+
+const inLab = () => window.location.hash.startsWith('#/lab')
+
+export default function App() {
+  const [lab, setLab] = useState(inLab)
+  useEffect(() => {
+    const on = () => {
+      setLab(inLab())
+      window.scrollTo(0, 0)
+    }
+    window.addEventListener('hashchange', on)
+    return () => window.removeEventListener('hashchange', on)
+  }, [])
+  return lab ? <Lab /> : <Site />
 }

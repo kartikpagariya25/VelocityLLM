@@ -42,7 +42,7 @@
   margin-left: -9px;
   border-radius: 50%;
   background: var(--hot-2);
-  box-shadow: 0 0 0 6px rgba(255, 106, 0, 0.25), 0 0 40px 10px rgba(255, 106, 0, 0.6);
+  box-shadow: 0 0 0 6px rgba(255, 77, 28, 0.25), 0 0 40px 10px rgba(255, 77, 28, 0.6);
   z-index: 2;
 }
 
@@ -75,7 +75,7 @@
 }
 
 .node--done .node__icon {
-  border-color: rgba(255, 106, 0, 0.45);
+  border-color: rgba(255, 77, 28, 0.45);
   color: var(--hot);
 }
 
@@ -85,7 +85,7 @@
 
 .node--on .node__icon {
   border-color: var(--hot);
-  background: rgba(255, 106, 0, 0.14);
+  background: rgba(255, 77, 28, 0.14);
   color: var(--hot-2);
 }
 
