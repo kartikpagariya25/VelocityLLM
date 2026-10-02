@@ -17,7 +17,7 @@ function Sawtooth({ refEl }) {
         d="M4 70 L34 60 L64 50 L94 40 L124 30 L124 52 L154 42 L184 32 L214 22 L214 44 L244 34 L274 24"
         pathLength="1"
         fill="none"
-        stroke="#d95200"
+        stroke="#ff4d1c"
         strokeWidth="2.5"
         strokeLinejoin="round"
         strokeDasharray="1"

@@ -46,6 +46,9 @@ export default function Navbar() {
             </a>
           ))}
         </nav>
+        <a className="nav__arena" href="#/lab">
+          Open Arena
+        </a>
         <a className="nav__repo" href={REPO} target="_blank" rel="noopener noreferrer" aria-label="VelocityLLM on GitHub">
           <Github width={20} height={20} />
         </a>
