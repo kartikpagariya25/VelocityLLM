@@ -32,7 +32,7 @@ export default function Team() {
     <section className="team section" id="team" ref={root}>
       <div className="wrap">
         <p className="kicker" data-reveal>The team</p>
-        <h2 className="h2" data-lines>Built by four, guided by one.</h2>
+        <h2 className="h2" data-lines>Built by three, guided by one.</h2>
         <p className="lede" data-reveal>
           A Single Core Labs project at VIT Pune, mentored by Dr. Viomesh K. Singh.
         </p>
