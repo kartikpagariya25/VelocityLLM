@@ -73,13 +73,6 @@ export const TEAM = [
     linkedin: 'https://linkedin.com/in/vikrantkadam028/',
   },
   {
-    name: 'Pranali D. Yelavikar',
-    role: 'Testing and robustness',
-    photo: '/team/pranali.jpg',
-    github: 'https://github.com/pranaliyelavikar14',
-    linkedin: 'https://www.linkedin.com/in/pranali-yelavikar-2b3178383/',
-  },
-  {
     name: 'Aditya D. Dengale',
     role: 'Documentation and benchmarking support',
     photo: '/team/aditya.jpg',

@@ -6,6 +6,8 @@ import { newStore, apply, ROWS, change, sentence, toCsv, download, logLine, f2 }
 import { drawTimeline, drawConcurrency } from './charts'
 import './Lab.css'
 
+const PC_DEFAULT = window.location.port === '9000' ? window.location.origin : 'http://localhost:9000'
+const SOURCE_BADGE = { sim: 'Simulated run', pc: 'PC GPU', cloud: 'College GPU', mock: 'Mock engine' }
 const CATS = ['admission', 'controller', 'lifecycle', 'system']
 const BURSTS = [20, 50, 100]
 const DEF = { users: 30, prompt: 'medium', text: '', traffic: 'flood', sla: 8, model: 'llama', mode: 'sequential', speed: 4 }
@@ -179,7 +181,7 @@ function Results({ store, label }) {
             </tr>
           </thead>
           <tbody>
-            {ROWS.map(([k, name, fmt, good]) => {
+            {ROWS.filter(([k]) => k !== 'errors' || s?.errors || d?.errors).map(([k, name, fmt, good]) => {
               const delta = s && d ? change(s[k], d[k]) : null
               const better = good && delta != null && Math.abs(delta) >= 1 ? (good === 'low' ? delta < 0 : delta > 0) : null
               return (
@@ -188,7 +190,7 @@ function Results({ store, label }) {
                   <td>{s ? fmt(s[k]) : '-'}</td>
                   <td>{d ? fmt(d[k]) : '-'}</td>
                   <td className={better == null ? '' : better ? 'good' : 'bad'}>
-                    {delta == null || (!good && s[k] === d[k]) ? '' : `${delta > 0 ? '+' : ''}${delta.toFixed(0)}%`}
+                    {delta == null ? '' : good ? `${delta > 0 ? '+' : ''}${delta.toFixed(0)}%` : s[k] === d[k] ? '' : `${d[k] - s[k] > 0 ? '+' : ''}${d[k] - s[k]}`}
                   </td>
                 </tr>
               )
@@ -210,7 +212,7 @@ function Inspector({ req, sla, onClose }) {
     ['Request', req.request_id],
     ['Engine', req.policy],
     ['Priority', req.priority],
-    ['Outcome', req.status === 'served' ? (total <= sla ? 'Served within SLA' : 'Served beyond SLA') : `Rejected (${String(req.reject_reason).replace('_', ' ')})`],
+    ['Outcome', req.status === 'served' ? (total <= sla ? 'Served within SLA' : 'Served beyond SLA') : req.status === 'error' ? `Failed (${String(req.reject_reason).replace('_', ' ')})` : `Rejected (${String(req.reject_reason).replace('_', ' ')})`],
     ['Arrival', `${f2(req.arrival_s)} s`],
     ['Queue wait', wait == null ? '-' : `${f2(wait)} s`],
     ['Execution', exec == null ? '-' : `${f2(exec)} s`],
@@ -219,6 +221,7 @@ function Inspector({ req, sla, onClose }) {
     ['HTTP', req.http_status],
   ]
   if (req.status === 'rejected') rows.push(['Retry after', `${f2(req.retry_after_s)} s`])
+  if (req.error) rows.push(['Error', req.error])
   return (
     <aside className="inspector" role="dialog" aria-label="Request inspector">
       <button className="x" onClick={onClose} aria-label="Close">
@@ -240,10 +243,30 @@ function Inspector({ req, sla, onClose }) {
 export default function Lab() {
   const [cfg, setCfg] = useState(DEF)
   const [source, setSource] = useState('sim')
-  const [url, setUrl] = useState('http://localhost:9000')
+  const [urls, setUrls] = useState(() => {
+    try {
+      return { pc: PC_DEFAULT, cloud: localStorage.getItem('vllm-cloud-url') || '' }
+    } catch {
+      return { pc: PC_DEFAULT, cloud: '' }
+    }
+  })
+  const live = source !== 'sim'
+  const url = urls[source] || ''
+  const setUrl = (v) => {
+    setUrls((u) => ({ ...u, [source]: v }))
+    if (source === 'cloud') {
+      try {
+        localStorage.setItem('vllm-cloud-url', v)
+      } catch {
+        return
+      }
+    }
+  }
   const [probeState, setProbeState] = useState(null)
+  const [liveInfo, setLiveInfo] = useState(null)
   const [, setTick] = useState(0)
   const [burstN, setBurstN] = useState(50)
+  const [recheck, setRecheck] = useState(0)
   const [pick, setPick] = useState(null)
   const [history, setHistory] = useState(loadHistory)
   const [viewing, setViewing] = useState(null)
@@ -268,13 +291,40 @@ export default function Lab() {
   })
 
   useEffect(() => {
-    if (source !== 'live') return setProbeState(null)
+    setLiveInfo(null)
+    if (!live || !url) return setProbeState(live ? 'down' : null)
     setProbeState('checking')
-    probe(url).then((r) => setProbeState(r ? 'ok' : 'down'))
-  }, [source, url])
+    let stale = false
+    const id = setTimeout(
+      () =>
+        probe(url).then((r) => {
+          if (stale) return
+          setLiveInfo(r)
+          setProbeState(r ? 'ok' : 'down')
+        }),
+      400,
+    )
+    return () => {
+      stale = true
+      clearTimeout(id)
+    }
+  }, [source, url, live, recheck])
+
+  useEffect(() => {
+    if (!live || !liveModels.length) return
+    if (!liveModels.some((m) => m.id === cfg.model)) setCfg((c) => ({ ...c, model: liveModels[0].id }))
+  }, [liveInfo, live])
+
+  useEffect(() => {
+    if (!live && !MODELS.some((m) => m.id === cfg.model)) setCfg((c) => ({ ...c, model: MODELS[0].id }))
+  }, [live])
 
   const set = (k) => (e) => setCfg((c) => ({ ...c, [k]: e.target.type === 'range' || e.target.type === 'number' ? Number(e.target.value) : e.target.value }))
   const st = store.current
+  const shownSource = st ? (st.info?.mock ? 'mock' : st.source) : source
+  const liveModels = (liveInfo?.models || []).filter((m) => m.available)
+  const modelOptions = live ? liveModels.map((m) => ({ id: m.id, name: m.name })) : MODELS
+  const blocked = live && (probeState !== 'ok' || !liveInfo?.ok)
   const running = st?.status === 'running'
 
   const finishRecord = useCallback((s) => {
@@ -306,7 +356,7 @@ export default function Lab() {
       dirty.current = true
     }
     try {
-      ctl.current = source === 'live' ? await startLiveRun(url, full, emit) : startSimRun(full, emit)
+      ctl.current = live ? await startLiveRun(url, full, emit) : startSimRun(full, emit)
     } catch (e) {
       s.status = 'failed'
       s.error = e.message
@@ -329,7 +379,7 @@ export default function Lab() {
           Velocity<span>LLM</span>
         </a>
         <span className="lab__title">Velocity Arena</span>
-        <span className={`src src--${source}`}>{source === 'sim' ? 'Simulated run' : 'Live backend'}</span>
+        <span className={`src src--${shownSource}`}>{SOURCE_BADGE[shownSource]}</span>
         <a className="lab__back" href="#/">
           Back to site
         </a>
@@ -377,7 +427,8 @@ export default function Lab() {
             <label>
               Model
               <select value={cfg.model} onChange={set('model')}>
-                {MODELS.map((m) => (
+                {modelOptions.length === 0 && <option value="">No models available</option>}
+                {modelOptions.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.name}
                   </option>
@@ -386,22 +437,28 @@ export default function Lab() {
             </label>
             <label>
               Run mode
-              <select value={cfg.mode} onChange={set('mode')}>
+              <select value={live ? 'sequential' : cfg.mode} onChange={set('mode')} disabled={live}>
                 <option value="sequential">Sequential (one GPU, fair)</option>
-                <option value="parallel">Side by side (live demo)</option>
+                <option value="parallel">Side by side (simulation only)</option>
               </select>
             </label>
             <label>
               Data source
               <select value={source} onChange={(e) => setSource(e.target.value)}>
                 <option value="sim">Simulation</option>
-                <option value="live">Live backend (GPU)</option>
+                <option value="pc">PC GPU (this machine)</option>
+                <option value="cloud">Cloud GPU (college)</option>
               </select>
-              {source === 'live' && (
+              {live && (
                 <>
-                  <input value={url} onChange={(e) => setUrl(e.target.value)} aria-label="Control service URL" />
-                  <small className={`probe probe--${probeState}`}>
-                    {probeState === 'ok' ? 'Control service reachable' : probeState === 'checking' ? 'Checking...' : 'Control service not reachable'}
+                  <input
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder={source === 'cloud' ? 'https://college-gpu-host:9000' : 'http://localhost:9000'}
+                    aria-label="Control service URL"
+                  />
+                  <small className={`probe probe--${probeState}`} onClick={() => setRecheck((n) => n + 1)} title="Click to check again">
+                    {probeState === 'ok' ? 'Control service reachable' : probeState === 'checking' ? 'Checking...' : url ? 'Control service not reachable' : 'Enter the control service URL'}
                   </small>
                 </>
               )}
@@ -436,7 +493,7 @@ export default function Lab() {
           )}
           <div className="actions">
             {!running ? (
-              <button className="go" onClick={run} disabled={source === 'live' && probeState !== 'ok'}>
+              <button className="go" onClick={run} disabled={blocked || (live && modelOptions.length === 0)}>
                 Run comparison
               </button>
             ) : (
@@ -458,15 +515,37 @@ export default function Lab() {
             </div>
             {err && <span className="err">{err}</span>}
             {st?.status === 'failed' && <span className="err">{st.error}</span>}
+            {live && !running && <span className="hint">Burst works in the simulation only.</span>}
             {running && cfg.mode === 'sequential' && st.phase === 'dynamic_load' && <span className="hint">Burst is locked here so both engines face the same traffic.</span>}
           </div>
+          {live && liveInfo && (
+            <ul className="checks">
+              {liveInfo.checks
+                .filter((c) => c.level !== 'info' || !c.ok)
+                .map((c) => (
+                  <li key={c.id} className={c.ok ? 'ok' : c.level === 'warn' ? 'warn' : 'bad'}>
+                    <b>{c.label}</b> {c.detail}
+                  </li>
+                ))}
+            </ul>
+          )}
+          {live && liveInfo?.mock && <p className="note">This control service uses the mock engine: the whole pipeline is real, but no GPU or model is involved, so the numbers say nothing about real hardware.</p>}
           {source === 'sim' && (
             <p className="note">
-              Simulation: both engines run on one modelled GPU (concurrency-dependent decode speed, 8-slot static batch, AIMD controller and admission rules from the repo). Numbers are illustrative, not measured. Switch to Live backend for real GPU runs.
+              Simulation: both engines run on one modelled GPU (concurrency-dependent decode speed, 8-slot static batch, AIMD controller and admission rules from the repo). Numbers are illustrative, not measured. Pick PC GPU or Cloud GPU for real runs.
             </p>
           )}
         </section>
 
+        {st?.status === 'failed' && st.errorDetail.length > 0 && (
+          <pre className="errdetail">{st.errorDetail.join('\n')}</pre>
+        )}
+        {st?.info && (
+          <p className="strip">
+            {st.info.model} · {st.info.mock ? 'mock engine' : st.info.gpu?.name || 'GPU not detected'} · SLA {st.info.sla_s.toFixed(1)} s · {st.info.users} users · {st.info.scenario}
+            {st.info.repeats > 1 ? ` · ${st.info.repeats} repeats (median)` : ''}
+          </p>
+        )}
         {st && (
           <ol className="stepper" aria-label="Run phases">
             {st.steps.map(([id, label], i) => (
@@ -524,7 +603,7 @@ export default function Lab() {
               {history.map((h) => (
                 <li key={h.id}>
                   <button onClick={() => (setViewing(h), window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }))}>
-                    <b>{h.cfg.users} users</b> {h.cfg.traffic}, SLA {h.cfg.sla.toFixed(1)} s, {h.source === 'sim' ? 'simulated' : 'live'}
+                    <b>{h.cfg.users} users</b> {h.cfg.traffic}, SLA {h.cfg.sla.toFixed(1)} s, {SOURCE_BADGE[h.source] || 'simulated'}
                     <span>
                       p99 {f2(h.static.p99_s)} s to {f2(h.dynamic.p99_s)} s
                     </span>
