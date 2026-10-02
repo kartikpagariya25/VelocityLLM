@@ -1,3 +1,5 @@
+const LOG_CAP = 5000
+
 export const emptyPolicy = () => ({ metrics: null, series: [], reqs: [], result: null })
 
 export function newStore(cfg, steps, source) {
@@ -11,7 +13,9 @@ export function newStore(cfg, steps, source) {
     startedAt: performance.now(),
     base: null,
     logs: [],
+    info: null,
     error: null,
+    errorDetail: [],
     static: emptyPolicy(),
     dynamic: emptyPolicy(),
   }
@@ -22,17 +26,21 @@ export function apply(s, { event, data }) {
   if (event === 'phase') {
     s.phase = data.phase
     s.phaseAt[data.phase] = performance.now() - s.startedAt
+    if (data.policy && data.phase.endsWith('_start')) s[data.policy] = emptyPolicy()
+  } else if (event === 'info') {
+    s.info = data
   } else if (event === 'log') {
-    let ts = data.ts || 0
-    if (ts > 1e9) {
+    let ts = data.t ?? data.ts ?? 0
+    if (data.t == null && ts > 1e9) {
       s.base ??= ts
       ts -= s.base
     }
-    s.logs.push({ ...data, ts, n: s.logs.length })
+    s.logs.push({ ...data, ts, n: (s.logCount = (s.logCount || 0) + 1) })
+    if (s.logs.length > LOG_CAP) s.logs.splice(0, s.logs.length - LOG_CAP)
   } else if (event === 'metrics' && p) {
     p.metrics = data
     p.series.push({
-      t: data.ts > 1e9 ? data.ts - (s.base ?? data.ts) : data.ts,
+      t: data.t ?? data.ts,
       active: data.active,
       queued: data.queued,
       limit: data.concurrency_limit,
@@ -42,10 +50,13 @@ export function apply(s, { event, data }) {
   } else if (event === 'result' && p) {
     p.result = data
   } else if (event === 'done') {
-    s.status = data.status === 'cancelled' ? 'cancelled' : 'done'
+    if (data.status === 'cancelled') s.status = 'cancelled'
+    else if (data.status === 'failed') s.status = 'failed'
+    else s.status = 'done'
   } else if (event === 'error') {
     s.status = 'failed'
     s.error = data.message
+    s.errorDetail = data.detail || []
   }
 }
 
@@ -61,6 +72,7 @@ export const ROWS = [
   ['within_sla_offered', 'Within SLA (of offered)', pctStr, 'high'],
   ['served', 'Served', (v) => v, null],
   ['rejected', 'Rejected', (v) => v, null],
+  ['errors', 'Failed requests', (v) => v, null],
 ]
 
 export const change = (a, b) => (a ? ((b - a) / a) * 100 : 0)
@@ -76,7 +88,7 @@ export function sentence(cfg, s, d) {
   const offered = d.within_sla_offered - s.within_sla_offered
   const slaNote =
     Math.abs(offered) < 0.01
-      ? ` Counted against all offered requests, the share finishing within the SLA was the same (${pctStr(d.within_sla_offered)}): Dynamic turned late replies into early rejections rather than into extra on-time replies.`
+      ? ` Counted against all offered requests, the share finishing within the SLA was the same (${pctStr(d.within_sla_offered)})${d.rejected > s.rejected ? ': Dynamic turned late replies into early rejections rather than into extra on-time replies' : ''}.`
       : offered > 0
         ? ` Counted against all offered requests, ${pctStr(d.within_sla_offered)} finished within the SLA against ${pctStr(s.within_sla_offered)} for Static.`
         : ` Counted against all offered requests, only ${pctStr(d.within_sla_offered)} finished within the SLA against ${pctStr(s.within_sla_offered)} for Static.`

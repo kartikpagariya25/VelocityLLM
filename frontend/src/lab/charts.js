@@ -51,7 +51,7 @@ export function drawTimeline(canvas, reqs, sla, tMax, hit) {
     const y = pad.t + i * rh
     if (y + rh > h - pad.b) return
     const bh = Math.max(1.5, rh - 1)
-    if (r.status === 'rejected') {
+    if (r.status !== 'served') {
       ctx.fillStyle = C.rej
       ctx.fillRect(X(r.arrival_s), y, 3, bh)
     } else {

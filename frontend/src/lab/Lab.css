@@ -109,3 +109,12 @@ td.good { color: var(--ok); font-weight: 600; } td.bad { color: var(--bad); font
   .seg { margin-left: 0; }
   .lab__title { display: none; }
 }
+
+.checks { list-style: none; display: grid; gap: 4px; font-size: .8rem; }
+.checks li { padding: 6px 10px; border-radius: 8px; background: var(--bg-2); }
+.checks li.ok { border-left: 3px solid var(--ok); } .checks li.warn { border-left: 3px solid var(--warn); } .checks li.bad { border-left: 3px solid var(--bad); background: #fdecee; }
+.checks b { margin-right: 6px; }
+.probe { cursor: pointer; }
+.src--mock { background: #e6e6e1; color: var(--ink-soft); }
+.strip { font-family: var(--mono); font-size: .78rem; color: var(--mute); }
+.errdetail { background: #fdecee; border: 1px solid var(--bad); border-radius: 10px; padding: 12px 14px; font-size: .74rem; overflow: auto; max-height: 220px; white-space: pre-wrap; }

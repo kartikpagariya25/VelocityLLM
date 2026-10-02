@@ -51,3 +51,4 @@ frontend/build/
 *.mp4
 *.mov
 *.avi
+results/runs/
