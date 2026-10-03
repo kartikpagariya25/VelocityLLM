@@ -107,6 +107,9 @@ class SmartBatchPolicy(DynamicBatchPolicy):
         self._last_calibration_status = "warming_up"
         self._avg_prompt_ema = 64.0
         self._mem_total_mb = 8192
+        # Idle GPU-memory baseline (lowest ratio seen). vLLM pre-allocates most of the VRAM at startup,
+        # so the ABSOLUTE ratio is high even when idle; only growth above the baseline is real pressure.
+        self._mem_baseline_ratio: Optional[float] = None
 
         # evaluation / observability metrics
         self._completions: Deque[Tuple[float, int, bool, str]] = deque(maxlen=5000)
@@ -302,13 +305,19 @@ class SmartBatchPolicy(DynamicBatchPolicy):
     def _update_throttle(self, kv: KVSnapshot, mem_used: int, mem_total: int) -> None:
         soft = getattr(self.config, "soft_memory_limit_ratio", 0.88)
         mem_ratio = (mem_used / mem_total) if mem_total else 0.0
+        if mem_total and mem_used > 0:
+            self._mem_baseline_ratio = (
+                mem_ratio if self._mem_baseline_ratio is None else min(self._mem_baseline_ratio, mem_ratio)
+            )
+        base = self._mem_baseline_ratio or 0.0
+        mem_signal = max(0.0, mem_ratio - base) / max(soft - base, 0.03)   # 1.0 == at the soft limit
         lanes = self.queue.lane_counts()
         op = max(1, self.capacity.operating_limit)
         rt_ratios = sorted(self._rt_latency_ratio)
         signals = {
             "future_kv": kv.future_pressure,
             "queue_depth": self.queue.size / max(1, self.config.max_queue_size),
-            "gpu_memory": mem_ratio / max(soft, 1e-6),
+            "gpu_memory": mem_signal,
             "rt_latency": (percentile(rt_ratios, 0.95) if len(rt_ratios) >= 5 else 0.0),
             "rt_waiting": lanes[TrafficClass.REAL_TIME.value] / op,
         }
@@ -728,6 +737,7 @@ class SmartBatchPolicy(DynamicBatchPolicy):
             "pressure": {
                 "value": round(self.pressure, 3), "signals": self.pressure_signals,
                 "throttle_at": self.smart.be_throttle_pressure, "resume_at": self.smart.be_resume_pressure,
+                "gpu_memory_baseline_ratio": (round(self._mem_baseline_ratio, 4) if self._mem_baseline_ratio else None),
                 "be_throttled": self.be_throttled,
             },
             "queue": self.queue.get_queue_snapshot(),

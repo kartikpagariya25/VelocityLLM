@@ -490,3 +490,37 @@ async def test_f4_unreachable_deadlines_are_not_boosted_in_overload():
     snap = queue.get_queue_snapshot(ctx_for(cal))
     assert snap[0]["request_id"] == "savable" and snap[-1]["doomed"] is True
     assert (await queue.select_next(ctx_for(cal))).request.request_id == "savable"
+
+
+# ----------------------------- regression: real vLLM pre-reserves VRAM (found on an RTX 4050 run)
+class _VllmLikeMemory(MockBackend):
+    """Idle memory already ~82% (vLLM pre-allocation). extra_mb simulates real growth above that."""
+    extra_mb = 0
+    def get_gpu_telemetry(self):
+        return 20 + self.active_inferences, int(6141 * 0.8166) + self.extra_mb, 6141
+
+
+@pytest.mark.asyncio
+async def test_f8_high_idle_gpu_memory_does_not_throttle_best_effort_forever():
+    backend = _VllmLikeMemory(tokens_per_second=200.0)
+    policy = SmartBatchPolicy(backend=backend, config=make_cfg())
+    await policy.initialize()
+    try:
+        await asyncio.sleep(0.3)
+        assert policy.be_throttled is False                       # idle at 82% memory is NOT pressure
+        be = await policy.schedule(req("batch job " * 20, max_tokens=10, tc="best_effort", sla_ms=20000))
+        assert be.tokens_generated > 0
+
+        backend.extra_mb = 340                                    # +5.5 points above idle baseline (still under the 88% hard-ish limit)
+        await asyncio.sleep(0.3)
+        assert policy.be_throttled is True                        # real growth still throttles best-effort
+        with pytest.raises(AdmissionRejectedException) as exc:
+            await policy.schedule(req("batch job", max_tokens=10, tc="best_effort", sla_ms=20000))
+        assert exc.value.reason_code == "policy_limit"
+
+        backend.extra_mb = 0
+        await asyncio.sleep(0.3)
+        assert policy.be_throttled is False                       # and it recovers
+        assert policy.get_smart_state()["pressure"]["gpu_memory_baseline_ratio"] is not None
+    finally:
+        await policy.shutdown()
