@@ -70,7 +70,7 @@ async def run_load(base_url, plan, timeout_s, on_request=None, id_prefix="r"):
             "queue_s": None, "exec_s": None,
         }
         try:
-            payload = {"prompt": item["prompt"], "max_tokens": item["max_tokens"], "request_id": rid}
+            payload = {"prompt": item["prompt"], "max_tokens": item["max_tokens"], "temperature": 0.0, "request_id": rid}
             async with session.post(f"{base_url}/generate", json=payload) as resp:
                 body = None
                 try:

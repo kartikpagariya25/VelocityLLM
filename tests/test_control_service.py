@@ -79,3 +79,17 @@ def test_diagnose_flags_invalid_results():
     assert "mis-calibrated" in diagnose({**base, "served": 5, "rejected": 95})[0]
     assert "failed" in diagnose({**base, "errors": 40})[0]
     assert "zero tokens" in diagnose({**base, "zero_token_share": 0.9})[0]
+
+
+def test_score_reports_total_tokens_and_requests_use_greedy_sampling():
+    from control_service.scoring import score
+
+    rows = [
+        {"status": "served", "arrival_s": 0.0, "end_s": 1.0, "tokens": 10},
+        {"status": "served", "arrival_s": 0.0, "end_s": 2.0, "tokens": 30},
+    ]
+    assert score(rows, 8.0, 2.0)["tokens"] == 40
+    import inspect
+    from control_service import loadgen
+
+    assert '"temperature": 0.0' in inspect.getsource(loadgen)

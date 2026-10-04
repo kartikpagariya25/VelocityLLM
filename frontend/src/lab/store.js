@@ -114,8 +114,9 @@ export function sentence(cfg, s, d, users, repeats = 1) {
       ? ` Counted against all offered requests, the share finishing within the SLA was the same (${pctStr(d.within_sla_offered)})${d.rejected > s.rejected ? ': Dynamic turned late replies into early rejections rather than into extra on-time replies' : ''}.`
       : ` Counted against all offered requests, ${pctStr(d.within_sla_offered)} finished within the SLA against ${pctStr(s.within_sla_offered)} for Static.`
   const zero = Math.max(s.zero_token_share || 0, d.zero_token_share || 0) > 0.5 ? ' Warning: most replies had zero tokens, so these numbers are not meaningful for this model.' : ''
+  const unequal = s.tokens && d.tokens && Math.abs(d.tokens - s.tokens) / s.tokens > 0.1 ? ` Note: the two schedulers wrote different amounts of text (${s.tokens} against ${d.tokens} tokens), so latency and throughput are not strictly comparable.` : ''
   const once = repeats > 1 ? '' : ' This is a single run; differences under 5% are normal run-to-run variation.'
-  return head + shed + sla + zero + once
+  return head + shed + sla + zero + unequal + once
 }
 
 export function sweepSentence(cfg, levels, data) {
