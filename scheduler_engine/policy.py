@@ -54,6 +54,41 @@ class SchedulerPolicy(ABC):
     async def schedule_stream(self, request: InferenceRequest) -> AsyncIterator[GenerationChunk]:
         pass
 
+    async def _drop_hopeless(self) -> None:
+        """Declines queued requests that can no longer meet their SLA so the GPU serves ones that still can."""
+        if not self.config.drop_hopeless_requests or self.queue.size == 0:
+            return
+        now = time.time()
+        try:
+            dropped = await self.queue.drop_where(
+                lambda entry: self.admission_controller.is_hopeless(entry.request, now - entry.enqueue_time)
+            )
+        except Exception as err:
+            logger.error("Queue sweep failed (%s); keeping all queued requests.", err)
+            return
+        for entry in dropped:
+            waited = now - entry.enqueue_time
+            request = entry.request
+            predicted = waited + self.admission_controller.estimate_execution_time(request.max_tokens)
+            retry_after = max(0.5, round(self.admission_controller.estimate_wait_time(self.queue.size, self.adaptive_controller.current_concurrency), 2))
+            self.total_rejected += 1
+            self.admission_controller.total_rejected_sla += 1
+            self.admission_controller.total_dropped_waiting += 1
+            if not entry.future.done():
+                entry.future.set_exception(
+                    AdmissionRejectedException(
+                        status=AdmissionStatus.REJECTED_SLA_IMPOSSIBLE,
+                        reason=(
+                            f"Predicted latency ({predicted:.2f}s) exceeds target SLA "
+                            f"({self.admission_controller.sla_limit_seconds(request):.2f}s); "
+                            f"dropped after waiting {waited:.2f}s in the queue."
+                        ),
+                        retry_after=retry_after,
+                    )
+                )
+        if dropped:
+            logger.warning("Dropped %d queued requests that could no longer meet their SLA.", len(dropped))
+
     async def cancel_request(self, request_id: str, reason: str = "Cancelled by client") -> bool:
         """Cancel a request and reclaim resources if supported by the policy."""
         return False
@@ -347,6 +382,8 @@ class DynamicBatchPolicy(SchedulerPolicy):
                 except Exception as err:
                     logger.error("Concurrency controller failed (%s); keeping the current limit.", err)
                     effective_limit = self.adaptive_controller.current_concurrency
+
+                await self._drop_hopeless()
 
                 available_slots = max(0, effective_limit - len(self._active_requests))
                 for _ in range(available_slots):

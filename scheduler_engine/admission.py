@@ -47,6 +47,7 @@ class AdmissionController:
         self.total_rejected_overload = 0
         self.total_rejected_sla = 0
         self.total_burst_shed = 0
+        self.total_dropped_waiting = 0
 
     def update_completion_stats(self, latency_seconds: float, tokens_generated: int) -> None:
         """Update service time estimation metrics from completed requests."""
@@ -88,6 +89,16 @@ class AdmissionController:
         """
         # Prefill / TTFT base + generation phase
         return 0.05 + (max_tokens * self._ema_token_time)
+
+    def sla_limit_seconds(self, request: InferenceRequest) -> float:
+        """SLA the request is judged against, including the extra grace HIGH priority gets."""
+        target = (request.sla_target_ms or self.default_sla_ms) / 1000.0
+        return target * (1.35 if request.priority == RequestPriority.HIGH else 1.05)
+
+    def is_hopeless(self, request: InferenceRequest, waited_seconds: float) -> bool:
+        """True when the request would miss its SLA even if it ran at twice the usual speed."""
+        optimistic_exec = 0.5 * self.estimate_execution_time(request.max_tokens)
+        return waited_seconds + optimistic_exec > self.sla_limit_seconds(request)
 
     def evaluate(
         self,
@@ -259,6 +270,7 @@ class AdmissionController:
             "total_rejected_overload": self.total_rejected_overload,
             "total_rejected_sla": self.total_rejected_sla,
             "total_burst_shed": self.total_burst_shed,
+            "total_dropped_waiting": self.total_dropped_waiting,
             "ema_service_time_seconds": round(self._ema_service_time, 4),
             "ema_token_time_seconds": round(self._ema_token_time, 5),
         }
