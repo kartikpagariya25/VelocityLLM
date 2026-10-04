@@ -5,6 +5,7 @@ and latency SLA deadlines to decide whether to accept, queue, or shed load (HTTP
 """
 
 import logging
+import math
 import time
 from typing import Optional, Tuple
 
@@ -75,13 +76,28 @@ class AdmissionController:
         self._last_completion = now
         logger.warning("No completions for %.0fs; service-time estimates decayed toward baseline.", self._stale_after_seconds)
 
-    def estimate_wait_time(self, current_queue_size: int, active_concurrency: int) -> float:
+    @staticmethod
+    def projected_slots(active_concurrency: int, concurrency_ceiling: Optional[int] = None) -> float:
+        """
+        Effective number of parallel slots to plan with. The adaptive controller can raise the limit
+        within about a second, but throughput grows roughly with the square root of the batch size
+        (4x the concurrency gave about 1.9x the tokens/s on the reference laptop GPU), so a reachable
+        ceiling is credited at that rate instead of fully.
+        """
+        base = max(1, active_concurrency)
+        if concurrency_ceiling and concurrency_ceiling > base:
+            return base * math.sqrt(concurrency_ceiling / base)
+        return float(base)
+
+    def estimate_wait_time(
+        self, current_queue_size: int, active_concurrency: int, concurrency_ceiling: Optional[int] = None
+    ) -> float:
         """
         Estimate queueing wait time in seconds before an arriving request begins execution.
-        E[wait] = (queue_length * avg_service_time) / max(1, concurrency)
+        E[wait] = (queue_length * avg_service_time) / projected parallel slots
         """
-        effective_concurrency = max(1, active_concurrency)
-        return (current_queue_size * self._ema_service_time) / effective_concurrency
+        slots = self.projected_slots(active_concurrency, concurrency_ceiling)
+        return (current_queue_size * self._ema_service_time) / slots
 
     def estimate_execution_time(self, max_tokens: int) -> float:
         """
@@ -109,6 +125,7 @@ class AdmissionController:
         gpu_memory_total_mb: int = 8192,
         in_flight: Optional[int] = None,
         gpu_memory_baseline_mb: Optional[int] = None,
+        concurrency_ceiling: Optional[int] = None,
     ) -> AdmissionResult:
         """
         Evaluate whether to admit or reject an incoming request.
@@ -122,7 +139,7 @@ class AdmissionController:
             or gpu_memory_total_mb <= 0
             or gpu_memory_used_mb - gpu_memory_baseline_mb >= 0.03 * gpu_memory_total_mb
         )
-        est_wait = self.estimate_wait_time(current_queue_size, active_concurrency)
+        est_wait = self.estimate_wait_time(current_queue_size, active_concurrency, concurrency_ceiling)
 
         # 1. Check Hard Queue Capacity Limit
         if current_queue_size >= self.max_queue_size:
