@@ -34,4 +34,5 @@ export const INFO = {
   sweepSla: ['Chart: answered on time', 'Of the answered requests, the share that met the SLA at each load. Higher is better.'],
   saved: ['Saved benchmarks', 'Every real run is saved by the control service. You can replay a saved run later without any GPU, which is what you use in front of judges.'],
   replay: ['Replay', 'Plays a saved real run again with the same logs, timeline and numbers, at the original or a faster speed. It is marked as a recorded run so nobody mistakes it for a live one.'],
+  repeats: ['Repeats', 'Runs the whole comparison several times, alternating which scheduler goes first, and reports the median. One run can be thrown off by a warm or cold GPU, so 3 or 5 repeats give a fairer answer but take longer.'],
 }

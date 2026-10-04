@@ -15,7 +15,7 @@ const SOURCE_BADGE = { sim: 'Simulated run', pc: 'PC GPU', cloud: 'College GPU',
 const INFO_KEY = { p50_s: 'p50', p95_s: 'p95', p99_s: 'p99', tokens_per_s: 'tokps', within_sla_served: 'slaServed', within_sla_offered: 'slaOffered', served: 'served', rejected: 'rejected', errors: 'errors' }
 const CATS = ['admission', 'controller', 'lifecycle', 'system']
 const BURSTS = [20, 50, 100]
-const DEF = { users: 30, prompt: 'medium', text: '', traffic: 'flood', sla: 8, model: 'llama', mode: 'sequential', speed: 4 }
+const DEF = { users: 30, prompt: 'medium', text: '', traffic: 'flood', sla: 8, model: 'llama', mode: 'sequential', speed: 4, repeats: 1 }
 
 const loadHistory = () => {
   try {
@@ -194,6 +194,29 @@ function Results({ store, label, recordingUrl }) {
           </div>
         )}
       </header>
+      {s && d && (
+        <div className="heads">
+          {[
+            ['Throughput (tokens/s)', 'tokens per second', s.tokens_per_s, d.tokens_per_s, (v) => v.toFixed(0), false, 'tokps'],
+            ['p99 latency', 'seconds, lower is better', s.p99_s, d.p99_s, (v) => `${v.toFixed(2)} s`, true, 'p99'],
+            ['Finished on time', 'of all users', s.within_sla_offered, d.within_sla_offered, (v) => `${Math.round(v * 100)}%`, false, 'slaOffered'],
+          ].map(([name, hint, a, b, fmt, low, info]) => {
+            const delta = change(a, b)
+            const v = delta == null ? 'same' : verdictOf(delta, low)
+            return (
+              <div key={name} className={`head head--${v}`}>
+                <span>
+                  {name} <Info id={info} />
+                </span>
+                <b>
+                  {fmt(a)} <i>to</i> {fmt(b)}
+                </b>
+                <em>{delta == null || Math.abs(delta) < 0.5 ? hint : `${delta > 0 ? '+' : ''}${delta.toFixed(0)}% for Dynamic`}</em>
+              </div>
+            )
+          })}
+        </div>
+      )}
       <div className="tablewrap">
         <table>
           <thead>
@@ -352,7 +375,7 @@ export default function Lab() {
     if (!live && !MODELS.some((m) => m.id === cfg.model)) setCfg((c) => ({ ...c, model: MODELS[0].id }))
   }, [live])
 
-  const set = (k) => (e) => setCfg((c) => ({ ...c, [k]: e.target.type === 'range' || e.target.type === 'number' ? Number(e.target.value) : e.target.value }))
+  const set = (k) => (e) => setCfg((c) => ({ ...c, [k]: e.target.type === 'range' || e.target.type === 'number' || k === 'repeats' ? Number(e.target.value) : e.target.value }))
   const st = store.current
   const shownSource = st ? (st.info?.mock ? 'mock' : st.source) : source
   const liveModels = (liveInfo?.models || []).filter((m) => m.available)
@@ -384,7 +407,7 @@ export default function Lab() {
     const full = { ...cfg, id: `run-${Date.now().toString(36)}`, levels: sweep ? levels : [cfg.users], users: sweep ? Math.max(...levels) : cfg.users }
     const s = newStore(full, stepsFor(cfg.mode), source)
     s.users = full.users
-    s.repeats = 1
+    s.repeats = live ? cfg.repeats : 1
     store.current = s
     const emit = (ev) => {
       apply(s, ev)
@@ -528,6 +551,20 @@ export default function Lab() {
                 </>
               )}
             </label>
+            {live && (
+              <label>
+                <span className="lt">
+                  Repeats (median) <Info id="repeats" />
+                </span>
+                <select value={cfg.repeats} onChange={set('repeats')}>
+                  {[1, 3, 5].map((x) => (
+                    <option key={x} value={x}>
+                      {x === 1 ? '1 (quick)' : `${x} (fairer, slower)`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             {source === 'sim' && (
               <label>
                 <span className="lt">Playback speed <Info id="speed" /></span>

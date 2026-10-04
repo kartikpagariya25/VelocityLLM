@@ -59,3 +59,7 @@ On the college machine run `python3 -m control_service --host 0.0.0.0 --cors-ori
 - Each policy is warmed up twice before scoring.
 - After every load level the service checks the result. If nothing was answered, 90% or more of the requests were rejected, more than 20% failed, or most replies had zero tokens, it logs a warning, stores it in `results.json` under `warnings`, and the Arena shows it above the verdict.
 - If the Arena itself hits an unexpected error it shows a recovery screen instead of a blank page.
+
+## Fair comparison settings
+
+Every load request is sent with temperature 0, so both schedulers get the same prompts and write the same text; without it the two engines produce different amounts of output and latency and throughput stop being comparable. The Arena also has a Repeats selector (1, 3 or 5): the comparison runs that many times, alternating which scheduler goes first, and reports the median. If the two schedulers still wrote more than 10% different amounts of text, the verdict says so.

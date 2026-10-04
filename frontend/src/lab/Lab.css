@@ -154,3 +154,13 @@ td.good { color: var(--ok); font-weight: 600; } td.bad { color: var(--bad); font
 .burst { align-items: center; }
 .lt { display: inline-flex; align-items: center; gap: 6px; }
 .warnline { margin: 0; padding: 10px 14px; border-radius: 10px; background: #fff4e0; border: 1px solid #f0c27a; color: #7a4a00; font-size: .86rem; }
+.heads { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.head { display: grid; gap: 4px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.head span { display: inline-flex; align-items: center; gap: 6px; font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--mute); }
+.head b { font-family: var(--mono, monospace); font-size: 1.45rem; }
+.head b i { font-style: normal; font-size: .8rem; color: var(--mute); margin: 0 4px; }
+.head em { font-style: normal; font-size: .82rem; color: var(--mute); }
+.head--better { border-color: #7cc79a; }
+.head--better em { color: #1f8a4c; }
+.head--worse { border-color: #e59a9a; }
+.head--worse em { color: #c0392b; }

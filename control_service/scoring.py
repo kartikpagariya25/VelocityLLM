@@ -2,7 +2,7 @@ import statistics
 
 FIELDS = (
     "p50_s", "p95_s", "p99_s", "tokens_per_s", "served", "offered", "rejected", "errors",
-    "within_sla_served", "within_sla_offered", "zero_token_share",
+    "within_sla_served", "within_sla_offered", "zero_token_share", "tokens",
 )
 
 
@@ -28,6 +28,7 @@ def score(rows, sla_s, wall_s):
         "within_sla_served": within / len(served) if served else 0.0,
         "within_sla_offered": within / len(rows) if rows else 0.0,
         "zero_token_share": zero / len(served) if served else 0.0,
+        "tokens": tokens,
     }
 
 
