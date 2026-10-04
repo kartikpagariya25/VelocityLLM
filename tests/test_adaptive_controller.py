@@ -78,3 +78,41 @@ def test_adaptive_controller_respects_bounds():
         recent_sla_breach=True,
     )
     assert controller.current_concurrency == 2  # bounded at min_concurrency=2
+
+
+def _grow(controller, **extra):
+    return controller.evaluate_and_tune(
+        gpu_util_percent=99.0,
+        gpu_memory_used_mb=3000,
+        gpu_memory_total_mb=8192,
+        queue_depth=20,
+        active_requests=controller.current_concurrency,
+        **extra,
+    )
+
+
+def test_increase_accelerates_while_backlog_lasts():
+    controller = AdaptiveBatchController(ServerConfig(initial_concurrency=8, min_concurrency=2, max_concurrency=32))
+    controller.cooldown_seconds = 0.0
+    seen = [_grow(controller) for _ in range(5)]
+    assert seen == [9, 11, 15, 22, 32]
+
+
+def test_no_increase_without_service_headroom():
+    controller = AdaptiveBatchController(ServerConfig(initial_concurrency=8, min_concurrency=2, max_concurrency=32))
+    controller.cooldown_seconds = 0.0
+    assert _grow(controller, service_headroom=False) == 8
+
+
+def test_memory_that_has_not_grown_is_not_pressure():
+    controller = AdaptiveBatchController(ServerConfig(initial_concurrency=8, min_concurrency=2, max_concurrency=32))
+    controller.cooldown_seconds = 0.0
+    limit = controller.evaluate_and_tune(
+        gpu_util_percent=90.0,
+        gpu_memory_used_mb=7900,
+        gpu_memory_total_mb=8192,
+        queue_depth=5,
+        active_requests=8,
+        gpu_memory_baseline_mb=7900,
+    )
+    assert limit >= 8

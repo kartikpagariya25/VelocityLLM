@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 from control_service.app import create_app
 from control_service.config import Settings
 from control_service.logparse import classify, is_noise
-from control_service.scoring import median_of, score
+from control_service.scoring import diagnose, median_of, score
 
 
 def row(status, arrival, end, tokens=10):
@@ -109,3 +109,12 @@ def test_live_adapter_forwards_sweep_events():
 
     src = (Path(__file__).resolve().parent.parent / "frontend" / "src" / "lab" / "live.js").read_text()
     assert "'level_result'" in src
+
+
+def test_memory_declines_are_counted_and_explained():
+    rows = [row("served", 0, 1)] + [
+        {"status": "rejected", "arrival_s": 0, "end_s": 0, "tokens": 0, "reject_reason": "memory"} for _ in range(4)
+    ]
+    result = score(rows, 5.0, 2.0)
+    assert result["memory_rejected"] == 4
+    assert any("GPU memory" in note for note in diagnose(result))

@@ -85,3 +85,33 @@ async def test_dynamic_policy_streaming():
     assert any(c.is_finished for c in chunks)
 
     await policy.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_dynamic_policy_admits_when_admission_check_breaks():
+    config = ServerConfig(initial_concurrency=2, min_concurrency=1, max_concurrency=4, target_sla_ms=5000.0)
+    policy = DynamicBatchPolicy(backend=MockBackend(tokens_per_second=300.0, simulated_ttft_seconds=0.01), config=config)
+    await policy.initialize()
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("estimator failure")
+
+    policy.admission_controller.evaluate = broken
+    res = await policy.schedule(InferenceRequest(prompt="hello", max_tokens=8))
+    assert res.tokens_generated > 0
+    await policy.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_dynamic_policy_keeps_serving_when_controller_breaks():
+    config = ServerConfig(initial_concurrency=2, min_concurrency=1, max_concurrency=4, target_sla_ms=5000.0)
+    policy = DynamicBatchPolicy(backend=MockBackend(tokens_per_second=300.0, simulated_ttft_seconds=0.01), config=config)
+    await policy.initialize()
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("controller failure")
+
+    policy.adaptive_controller.evaluate_and_tune = broken
+    res = await asyncio.wait_for(policy.schedule(InferenceRequest(prompt="hello", max_tokens=8)), timeout=5)
+    assert res.tokens_generated > 0
+    await policy.shutdown()

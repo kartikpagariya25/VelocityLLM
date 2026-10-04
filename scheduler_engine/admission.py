@@ -97,6 +97,7 @@ class AdmissionController:
         gpu_memory_used_mb: int = 0,
         gpu_memory_total_mb: int = 8192,
         in_flight: Optional[int] = None,
+        gpu_memory_baseline_mb: Optional[int] = None,
     ) -> AdmissionResult:
         """
         Evaluate whether to admit or reject an incoming request.
@@ -105,6 +106,11 @@ class AdmissionController:
         """
         self.total_evaluated += 1
         self._decay_stale_estimates()
+        memory_grew = (
+            gpu_memory_baseline_mb is None
+            or gpu_memory_total_mb <= 0
+            or gpu_memory_used_mb - gpu_memory_baseline_mb >= 0.03 * gpu_memory_total_mb
+        )
         est_wait = self.estimate_wait_time(current_queue_size, active_concurrency)
 
         # 1. Check Hard Queue Capacity Limit
@@ -130,7 +136,7 @@ class AdmissionController:
         if gpu_memory_total_mb > 0:
             mem_utilization = gpu_memory_used_mb / gpu_memory_total_mb
             hard_limit = getattr(self.config, "hard_memory_limit_ratio", 0.94)
-            if mem_utilization >= hard_limit:
+            if mem_utilization >= hard_limit and memory_grew:
                 self.total_rejected_overload += 1
                 return AdmissionResult(
                     status=AdmissionStatus.REJECTED_OVERLOAD,
@@ -224,7 +230,7 @@ class AdmissionController:
         if gpu_memory_total_mb > 0:
             mem_utilization = gpu_memory_used_mb / gpu_memory_total_mb
             soft_limit = getattr(self.config, "soft_memory_limit_ratio", 0.88)
-            if mem_utilization >= soft_limit and request.priority != RequestPriority.HIGH:
+            if mem_utilization >= soft_limit and memory_grew and request.priority != RequestPriority.HIGH:
                 self.total_rejected_overload += 1
                 return AdmissionResult(
                     status=AdmissionStatus.REJECTED_OVERLOAD,

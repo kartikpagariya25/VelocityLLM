@@ -77,15 +77,15 @@ export default function Pressure({ store, running, disabled, onRun, onJudgePrese
           <div className="sweep">
             <div>
               <h4>
-                p99 latency of answered requests <Info id="sweepP99" />
+                Slowest replies (p99) <Info id="sweepP99" />
               </h4>
               <Chart levels={levels} data={data} k="p99_s" opts={{ title: 'seconds', sla: store.cfg.sla, fmt: (v) => v.toFixed(1) }} />
             </div>
             <div>
               <h4>
-                Answered within the SLA <Info id="sweepSla" />
+                Users answered on time <Info id="sweepSla" />
               </h4>
-              <Chart levels={levels} data={data} k="within_sla_served" opts={{ title: '% of answered', scale: 100, fixedMax: 110, fmt: (v) => `${Math.round(v)}%` }} />
+              <Chart levels={levels} data={data} k="within_sla_offered" opts={{ title: '% of all users', scale: 100, fixedMax: 100, fmt: (v) => `${Math.round(v)}%` }} />
             </div>
           </div>
           <p className="legend">
@@ -104,7 +104,7 @@ export default function Pressure({ store, running, disabled, onRun, onJudgePrese
                   <th>Change</th>
                   <th>Static on time</th>
                   <th>Dynamic on time</th>
-                  <th>Dynamic rejected</th>
+                  <th>Dynamic declined</th>
                 </tr>
               </thead>
               <tbody>
@@ -119,8 +119,8 @@ export default function Pressure({ store, running, disabled, onRun, onJudgePrese
                       <td>{s ? `${f2(s.p99_s)} s` : '...'}</td>
                       <td>{d ? `${f2(d.p99_s)} s` : '...'}</td>
                       <td className={tone}>{v == null ? '' : `${v > 0 ? '+' : ''}${v.toFixed(0)}%`}</td>
-                      <td>{s ? pctStr(s.within_sla_served) : '...'}</td>
-                      <td>{d ? pctStr(d.within_sla_served) : '...'}</td>
+                      <td>{s ? pctStr(s.within_sla_offered) : '...'}</td>
+                      <td>{d ? pctStr(d.within_sla_offered) : '...'}</td>
                       <td>{d ? `${d.rejected} of ${d.offered}` : '...'}</td>
                     </tr>
                   )
