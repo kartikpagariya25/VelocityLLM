@@ -58,6 +58,16 @@ def sse(record):
     return f"id: {record['id']}\nevent: {record['event']}\ndata: {json.dumps(record['data'])}\n\n"
 
 
+class SiteFiles(StaticFiles):
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        if path.startswith("assets/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        else:
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 def create_app(settings: Settings) -> FastAPI:
     store = RunStore(settings.results_dir)
     orch = Orchestrator(settings, store)
@@ -265,5 +275,5 @@ def create_app(settings: Settings) -> FastAPI:
         return {"run_id": run.id}
 
     if settings.frontend_dir.is_dir():
-        app.mount("/", StaticFiles(directory=settings.frontend_dir, html=True), name="site")
+        app.mount("/", SiteFiles(directory=settings.frontend_dir, html=True), name="site")
     return app

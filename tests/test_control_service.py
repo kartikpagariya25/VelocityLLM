@@ -93,3 +93,19 @@ def test_score_reports_total_tokens_and_requests_use_greedy_sampling():
     from control_service import loadgen
 
     assert '"temperature": 0.0' in inspect.getsource(loadgen)
+
+
+def test_frontend_cache_headers(tmp_path):
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "index.html").write_text("<html></html>")
+    (tmp_path / "assets" / "app.js").write_text("x")
+    c = TestClient(create_app(Settings(mock=True, frontend_dir=tmp_path)))
+    assert c.get("/").headers["cache-control"] == "no-cache"
+    assert "immutable" in c.get("/assets/app.js").headers["cache-control"]
+
+
+def test_live_adapter_forwards_sweep_events():
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parent.parent / "frontend" / "src" / "lab" / "live.js").read_text()
+    assert "'level_result'" in src
