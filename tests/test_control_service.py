@@ -31,6 +31,7 @@ def test_score_counts_and_sla():
     assert (r["served"], r["offered"], r["rejected"], r["errors"]) == (2, 4, 1, 1)
     assert r["within_sla_served"] == 0.5 and r["within_sla_offered"] == 0.25
     assert r["tokens_per_s"] == pytest.approx(2.0)
+    assert r["goodput_tokens_per_s"] == pytest.approx(1.0)
 
 
 def test_median_of_repeats():

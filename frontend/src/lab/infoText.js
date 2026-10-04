@@ -23,6 +23,7 @@ export const INFO = {
   log: ['Execution log', 'Every step taken by the schedulers, one line at a time, with the time it happened. Admission: letting a request in or turning it away. Controller: changing the limit. Lifecycle: a request starting or finishing. System: engine start-up and shutdown.'],
   p50: ['p50 (median)', 'Half of the answered requests were faster than this. The typical waiting time.'],
   p99: ['p99', 'Out of 100 answered requests, 99 were faster than this. It is close to the worst waiting time, and it is what unhappy users feel.'],
+  goodput: ['On-time tokens per second', 'Only the text from answers that arrived within the SLA, divided by the run time. Late answers do not count, so a scheduler cannot look good by being slow.'],
   tokps: ['Tokens per second', 'How much text the system writes every second in total. Higher means the GPU is used better. It is only compared when both schedulers answered a similar amount of text.'],
   slaServed: ['Within SLA (of served)', 'Of the requests that were answered, the share that arrived within the promised time.'],
   slaOffered: ['Answered on time', 'How many of the users got their reply within the promised time. A declined request counts as not on time, so this is the strictest view.'],

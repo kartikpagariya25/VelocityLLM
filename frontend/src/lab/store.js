@@ -78,6 +78,7 @@ export const ROWS = [
   ['p95_s', 'p95 latency', (v) => `${f2(v)} s`, 'low'],
   ['p99_s', 'p99 latency', (v) => `${f2(v)} s`, 'low'],
   ['tokens_per_s', 'Tokens / s', (v) => v.toFixed(0), 'high'],
+  ['goodput_tokens_per_s', 'On-time tokens / s', (v) => v.toFixed(0), 'high'],
   ['within_sla_served', 'Within SLA (of served)', pctStr, 'high'],
   ['within_sla_offered', 'Answered on time (of all users)', pctStr, 'high'],
   ['served', 'Served', (v) => v, null],
@@ -98,6 +99,8 @@ const phrase = (v, up, down) => (Math.abs(v) < NOISE ? 'about the same' : v < 0 
 
 export const onTime = (r) => Math.round((r.within_sla_offered || 0) * (r.offered || 0))
 
+export const hasGoodput = (s, d) => s.goodput_tokens_per_s != null && d.goodput_tokens_per_s != null
+
 export const unequalText = (s, d) => !!(s.tokens && d.tokens && Math.abs(d.tokens - s.tokens) / s.tokens > 0.1)
 
 export function sentence(cfg, s, d, users, repeats = 1) {
@@ -116,7 +119,9 @@ export function sentence(cfg, s, d, users, repeats = 1) {
   const shed = d.rejected
     ? ` It declined ${d.rejected} of ${d.offered} requests it could not finish in time; Static accepted every request and ${Math.max(0, s.served - onS)} of its replies came late.`
     : ' It declined no requests.'
-  const speed = unequalText(s, d)
+  const speed = unequalText(s, d) && hasGoodput(s, d)
+    ? ` Counting only text delivered on time, Dynamic produced ${phrase(change(s.goodput_tokens_per_s, d.goodput_tokens_per_s), 'more', 'less')} per second.`
+    : unequalText(s, d)
     ? ` Throughput is not compared because the schedulers answered different amounts of text (${s.tokens} against ${d.tokens} tokens).`
     : ` Throughput was ${phrase(tok, 'higher', 'lower')}.`
   const zero = Math.max(s.zero_token_share || 0, d.zero_token_share || 0) > 0.5 ? ' Warning: most replies had zero tokens, so these numbers are not meaningful for this model.' : ''
