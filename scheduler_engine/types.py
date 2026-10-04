@@ -245,6 +245,7 @@ class ServerConfig:
 
     # Phase 3 Robustness additions
     enable_structured_logging: bool = False
+    drop_hopeless_requests: bool = True  # decline queued requests that can no longer meet their SLA
 
     # Phase A - API Key Authentication (optional; None disables auth entirely)
     api_key: Optional[str] = None

@@ -107,6 +107,15 @@ class PrioritizedRequestQueue:
             except asyncio.TimeoutError:
                 return None
 
+    async def drop_where(self, predicate) -> List[QueueEntry]:
+        """Remove and return every waiting entry for which predicate(entry) is true."""
+        async with self._lock:
+            matched = [entry for entry in self._entry_map.values() if predicate(entry)]
+            for entry in matched:
+                self._entry_map.pop(entry.request.request_id, None)
+                entry.cancelled = True
+            return matched
+
     def is_queued(self, request_id: str) -> bool:
         """Check if request is currently pending in queue."""
         return request_id in self._entry_map
