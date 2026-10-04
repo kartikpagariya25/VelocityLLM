@@ -69,3 +69,4 @@ Every load request is sent with temperature 0, so both schedulers get the same p
 - **Throughput** is shown as a comparison only when both schedulers answered a similar amount of text. If Dynamic declines most requests its run is shorter and covers different work, so the card says it is not comparable.
 - Dynamic raises its concurrency limit quickly while a queue builds and memory allows, and stops raising it once replies themselves (not queue waiting) approach the SLA.
 - GPU memory limits only apply once usage has grown after the model loaded, so other programs holding the GPU do not make Dynamic refuse everything.
+- Token counts come from the engine's own count of generated tokens, so busy runs are not under-counted when the engine batches several tokens into one streamed update.

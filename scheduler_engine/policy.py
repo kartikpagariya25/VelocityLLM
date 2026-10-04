@@ -118,7 +118,7 @@ class StaticBatchPolicy(SchedulerPolicy):
         exec_time = time.time() - start_exec
         total_latency = time.time() - enqueue_time
         full_text = "".join(generated_chunks)
-        token_count = len(generated_chunks)
+        token_count = self.backend.pop_token_count(request.request_id) or len(generated_chunks)
 
         self.total_completed += 1
         self.total_tokens += token_count
@@ -381,7 +381,7 @@ class DynamicBatchPolicy(SchedulerPolicy):
             total_latency = time.time() - entry.enqueue_time
             exec_time = time.time() - start_exec
             full_response = "".join(chunks)
-            token_count = len(chunks)
+            token_count = self.backend.pop_token_count(request.request_id) or len(chunks)
 
             target_sla_sec = (request.sla_target_ms or self.config.target_sla_ms) / 1000.0
             sla_met = total_latency <= target_sla_sec
