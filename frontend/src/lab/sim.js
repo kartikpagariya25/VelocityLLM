@@ -76,11 +76,13 @@ export function score(requests, sla) {
   const within = served.filter((r) => r.end_s - r.arrival_s <= sla).length
   const span = served.length ? Math.max(...served.map((r) => r.end_s)) - Math.min(...requests.map((r) => r.arrival_s)) : 0
   const tokens = served.reduce((n, r) => n + r.tokens, 0)
+  const onTimeTokens = served.filter((r) => r.end_s - r.arrival_s <= sla).reduce((n, r) => n + r.tokens, 0)
   return {
     p50_s: pct(lat, 50),
     p95_s: pct(lat, 95),
     p99_s: pct(lat, 99),
     tokens_per_s: span > 0 ? tokens / span : 0,
+    goodput_tokens_per_s: span > 0 ? onTimeTokens / span : 0,
     served: served.length,
     offered: requests.length,
     rejected: requests.length - served.length,

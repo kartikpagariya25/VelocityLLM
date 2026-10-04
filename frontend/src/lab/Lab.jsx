@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { MODELS, PROMPTS, TRAFFIC, LIMITS, customTokens } from './sim'
 import { startSimRun, startSimSweep, stepsFor } from './runner'
 import { startLiveRun, probe } from './live'
-import { newStore, apply, ROWS, change, sentence, verdictOf, toCsv, download, logLine, f2, onTime, unequalText } from './store'
+import { newStore, apply, ROWS, change, sentence, verdictOf, toCsv, download, logLine, f2, onTime, unequalText, hasGoodput } from './store'
 import { drawTimeline, drawConcurrency, niceMax } from './charts'
 import Info from './Info'
 import Count from './Count'
@@ -13,7 +13,7 @@ import './Lab.css'
 
 const PC_DEFAULT = window.location.port === '9000' ? window.location.origin : 'http://localhost:9000'
 const SOURCE_BADGE = { sim: 'Simulated run', pc: 'PC GPU', cloud: 'College GPU', mock: 'Mock engine', replay: 'Recorded run' }
-const INFO_KEY = { p50_s: 'p50', p95_s: 'p95', p99_s: 'p99', tokens_per_s: 'tokps', within_sla_served: 'slaServed', within_sla_offered: 'slaOffered', served: 'served', rejected: 'rejected', errors: 'errors' }
+const INFO_KEY = { p50_s: 'p50', p95_s: 'p95', p99_s: 'p99', tokens_per_s: 'tokps', goodput_tokens_per_s: 'goodput', within_sla_served: 'slaServed', within_sla_offered: 'slaOffered', served: 'served', rejected: 'rejected', errors: 'errors' }
 const CATS = ['admission', 'controller', 'lifecycle', 'system']
 const BURSTS = [20, 50, 100]
 const DEF = { users: 30, prompt: 'medium', text: '', traffic: 'flood', sla: 8, model: 'llama', mode: 'sequential', speed: 4, repeats: 1 }
@@ -208,7 +208,9 @@ function Results({ store, label, recordingUrl }) {
           {[
             ['Answered on time', `of ${s.offered || d.offered || '?'} users`, onTime(s), onTime(d), (v) => `${Math.round(v)}`, false, 'slaOffered'],
             ['p99 latency', 'seconds, lower is better', s.p99_s, d.p99_s, (v) => `${v.toFixed(2)} s`, true, 'p99'],
-            ['Throughput (tokens/s)', 'tokens per second', s.tokens_per_s, d.tokens_per_s, (v) => v.toFixed(0), false, 'tokps'],
+            unequalText(s, d) && hasGoodput(s, d)
+              ? ['On-time tokens/s', 'text delivered within the SLA', s.goodput_tokens_per_s, d.goodput_tokens_per_s, (v) => v.toFixed(0), false, 'goodput']
+              : ['Throughput (tokens/s)', 'tokens per second', s.tokens_per_s, d.tokens_per_s, (v) => v.toFixed(0), false, 'tokps'],
           ].map(([name, hint, a, b, fmt, low, info]) => {
             const same = info === 'tokps' && unequalText(s, d)
             const delta = change(a, b)
@@ -240,7 +242,7 @@ function Results({ store, label, recordingUrl }) {
             </tr>
           </thead>
           <tbody>
-            {ROWS.filter(([k]) => k !== 'errors' || s?.errors || d?.errors).map(([k, name, fmt, good]) => {
+            {ROWS.filter(([k]) => (k !== 'errors' || s?.errors || d?.errors) && (k !== 'goodput_tokens_per_s' || hasGoodput(s, d))).map(([k, name, fmt, good]) => {
               const delta = s && d ? change(s[k], d[k]) : null
               const verdict = good && delta != null ? verdictOf(delta, good === 'low') : 'same'
               const better = verdict === 'same' ? null : verdict === 'better'
