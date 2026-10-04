@@ -311,6 +311,7 @@ class DynamicBatchPolicy(SchedulerPolicy):
                 gpu_memory_total_mb=mem_total,
                 in_flight=len(self._active_requests),
                 gpu_memory_baseline_mb=self._memory_baseline(mem_used),
+                concurrency_ceiling=self.config.max_concurrency,
             )
         except Exception as err:
             logger.error("Admission check failed (%s); admitting request %s.", err, request.request_id)
