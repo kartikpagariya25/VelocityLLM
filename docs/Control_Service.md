@@ -63,3 +63,9 @@ On the college machine run `python3 -m control_service --host 0.0.0.0 --cors-ori
 ## Fair comparison settings
 
 Every load request is sent with temperature 0, so both schedulers get the same prompts and write the same text; without it the two engines produce different amounts of output and latency and throughput stop being comparable. The Arena also has a Repeats selector (1, 3 or 5): the comparison runs that many times, alternating which scheduler goes first, and reports the median. If the two schedulers still wrote more than 10% different amounts of text, the verdict says so.
+
+## Reading the results
+- **Answered on time** counts the users who got a reply inside the SLA. A declined request counts as not on time.
+- **Throughput** is shown as a comparison only when both schedulers answered a similar amount of text. If Dynamic declines most requests its run is shorter and covers different work, so the card says it is not comparable.
+- Dynamic raises its concurrency limit quickly while a queue builds and memory allows, and stops raising it once replies themselves (not queue waiting) approach the SLA.
+- GPU memory limits only apply once usage has grown after the model loaded, so other programs holding the GPU do not make Dynamic refuse everything.

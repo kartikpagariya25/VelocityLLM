@@ -166,3 +166,10 @@ td.good { color: var(--ok); font-weight: 600; } td.bad { color: var(--bad); font
 .head--better em { color: #1f8a4c; }
 .head--worse { border-color: #e59a9a; }
 .head--worse em { color: #c0392b; }
+
+.key { display: flex; align-items: center; gap: 6px; font-size: .72rem; color: var(--mute); margin: 0 0 6px; }
+.key .dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; margin-left: 8px; }
+.dot--ok { background: #17b06b; } .dot--late { background: #f0a500; } .dot--rej { background: #e8384f; }
+.head b { font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .ln { animation: none; } }
+.pressure .lg--s { border-top-style: solid; }

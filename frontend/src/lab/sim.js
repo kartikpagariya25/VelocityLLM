@@ -189,12 +189,13 @@ export class Sim {
   }
 
   control() {
-    if (this.policy !== 'dynamic' || this.t - this.lastCtl < 0.5) return
+    if (this.policy !== 'dynamic' || this.t - this.lastCtl < 0.25) return
     const recent = this.lat.slice(-20)
     const oldest = [...this.queue, ...this.active].reduce((m, r) => Math.max(m, this.t - r.arrival_s), 0)
     const pressure = Math.max(pct(recent, 95), oldest)
     const prev = this.limit
     let why = null
+    this.streak = this.streak || 0
     if (this.mem > 0.94) {
       this.limit = MIN_C
       why = 'emergency: GPU memory above 94%'
@@ -202,9 +203,11 @@ export class Sim {
       this.limit = Math.max(MIN_C, Math.floor(this.limit * 0.75))
       why = `decrease: p95 ${pressure.toFixed(2)}s near SLA ${this.sla.toFixed(2)}s`
     } else if (this.queue.length > 0 && pressure < this.sla * 0.6 && this.limit < MAX_C && MEM_BASE + MEM_PER * (this.limit + 1) <= 0.9) {
-      this.limit += 1
+      this.streak = Math.min((this.streak || 0) + 1, 4)
+      this.limit = Math.min(MAX_C, this.limit + Math.min(2 ** (this.streak - 1), Math.max(1, this.limit >> 1)))
       why = `increase: p95 ${pressure.toFixed(2)}s well under SLA, queue ${this.queue.length}`
     }
+    if (this.limit <= prev) this.streak = 0
     if (why && this.limit !== prev) {
       this.lastCtl = this.t
       this.line('controller', 'INFO', `Adaptive Batch Controller: concurrency ${prev} -> ${this.limit} (${why})`)

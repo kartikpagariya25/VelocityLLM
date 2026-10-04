@@ -137,3 +137,24 @@ def test_stale_estimates_decay_toward_baseline():
     req = InferenceRequest(prompt="Hello", max_tokens=10)
     controller.evaluate(request=req, current_queue_size=0, active_concurrency=4, in_flight=1)
     assert controller._ema_token_time < 0.5
+
+
+def _memory_case(used_mb, baseline_mb):
+    controller = AdmissionController(ServerConfig(max_queue_size=50, target_sla_ms=5000.0))
+    req = InferenceRequest(prompt="x", max_tokens=10, priority=RequestPriority.NORMAL)
+    return controller.evaluate(
+        request=req,
+        current_queue_size=0,
+        active_concurrency=2,
+        gpu_memory_used_mb=used_mb,
+        gpu_memory_total_mb=8192,
+        gpu_memory_baseline_mb=baseline_mb,
+    )
+
+
+def test_memory_limits_ignore_a_full_gpu_that_has_not_grown():
+    assert _memory_case(7900, 7900).admitted is True
+
+
+def test_memory_limits_still_apply_when_usage_grows():
+    assert _memory_case(7900, 6500).admitted is False

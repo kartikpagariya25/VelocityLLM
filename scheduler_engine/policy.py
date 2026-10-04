@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 import asyncio
 import logging
 import time
-from typing import AsyncIterator, Dict, List, Optional
+from typing import AsyncIterator, Dict, List, Optional, Tuple
 import uuid
 
 from scheduler_engine.adaptive_controller import AdaptiveBatchController
@@ -18,6 +18,7 @@ from scheduler_engine.admission import AdmissionController
 from scheduler_engine.backend import GPUOutOfMemoryError, InferenceBackend
 from scheduler_engine.priority_queue import PrioritizedRequestQueue
 from scheduler_engine.types import (
+    AdmissionResult,
     AdmissionStatus,
     GenerationChunk,
     InferenceRequest,
@@ -239,12 +240,52 @@ class DynamicBatchPolicy(SchedulerPolicy):
         self.sla_breaches = 0
         self.latencies: List[float] = []
         self.queue_times: List[float] = []
+        self.exec_times: List[float] = []
+        self._memory_baseline_mb: Optional[int] = None
+        self.backend_ready = False
 
         # Phase 3 Telemetry
         self.client_disconnects_count = 0
         self.burst_shed_count = 0
         self.oom_recoveries_count = 0
         self.validation_errors_count = 0
+
+    def _memory_baseline(self, mem_used: int) -> Optional[int]:
+        """GPU memory in use once the model is loaded; later growth is what signals real pressure."""
+        if self._memory_baseline_mb is None and mem_used > 0 and self.backend_ready:
+            self._memory_baseline_mb = mem_used
+        return self._memory_baseline_mb
+
+    def _service_signals(self) -> Tuple[bool, bool]:
+        """Returns (breach, headroom) judged on execution time alone, so waiting in the queue never shrinks the batch."""
+        recent = self.exec_times[-8:]
+        if len(recent) < 4:
+            return False, True
+        median = sorted(recent)[len(recent) // 2]
+        sla = self.config.target_sla_ms / 1000.0
+        return median > sla, median < 0.7 * sla
+
+    def _evaluate_admission(self, request: InferenceRequest):
+        try:
+            _, mem_used, mem_total = self.backend.get_gpu_telemetry()
+            return self.admission_controller.evaluate(
+                request=request,
+                current_queue_size=self.queue.size,
+                active_concurrency=max(len(self._active_requests), self.adaptive_controller.current_concurrency),
+                gpu_memory_used_mb=mem_used,
+                gpu_memory_total_mb=mem_total,
+                in_flight=len(self._active_requests),
+                gpu_memory_baseline_mb=self._memory_baseline(mem_used),
+            )
+        except Exception as err:
+            logger.error("Admission check failed (%s); admitting request %s.", err, request.request_id)
+            return AdmissionResult(
+                status=AdmissionStatus.ACCEPTED,
+                admitted=True,
+                reason="Admission check unavailable; admitted.",
+                estimated_delay_seconds=0.0,
+                retry_after_seconds=0.0,
+            )
 
     async def cancel_request(self, request_id: str, reason: str = "Client disconnected") -> bool:
         """
@@ -269,6 +310,7 @@ class DynamicBatchPolicy(SchedulerPolicy):
 
     async def initialize(self) -> None:
         await self.backend.initialize()
+        self.backend_ready = True
         self._stop_event.clear()
         self._dispatcher_task = asyncio.create_task(self._dispatch_loop())
         logger.info(
@@ -289,16 +331,22 @@ class DynamicBatchPolicy(SchedulerPolicy):
         while not self._stop_event.is_set():
             try:
                 util, mem_used, mem_total = self.backend.get_gpu_telemetry()
-                recent_breach = bool(self.latencies and self.latencies[-1] > (self.config.target_sla_ms / 1000.0))
+                breach, headroom = self._service_signals()
 
-                effective_limit = self.adaptive_controller.evaluate_and_tune(
-                    gpu_util_percent=float(util),
-                    gpu_memory_used_mb=mem_used,
-                    gpu_memory_total_mb=mem_total,
-                    queue_depth=self.queue.size,
-                    active_requests=len(self._active_requests),
-                    recent_sla_breach=recent_breach,
-                )
+                try:
+                    effective_limit = self.adaptive_controller.evaluate_and_tune(
+                        gpu_util_percent=float(util),
+                        gpu_memory_used_mb=mem_used,
+                        gpu_memory_total_mb=mem_total,
+                        queue_depth=self.queue.size,
+                        active_requests=len(self._active_requests),
+                        recent_sla_breach=breach,
+                        service_headroom=headroom,
+                        gpu_memory_baseline_mb=self._memory_baseline(mem_used),
+                    )
+                except Exception as err:
+                    logger.error("Concurrency controller failed (%s); keeping the current limit.", err)
+                    effective_limit = self.adaptive_controller.current_concurrency
 
                 available_slots = max(0, effective_limit - len(self._active_requests))
                 for _ in range(available_slots):
@@ -344,6 +392,9 @@ class DynamicBatchPolicy(SchedulerPolicy):
             self.total_tokens += token_count
             self.latencies.append(total_latency)
             self.queue_times.append(queue_time)
+            self.exec_times.append(exec_time)
+            if len(self.exec_times) > 100:
+                self.exec_times.pop(0)
             if len(self.latencies) > 500:
                 self.latencies.pop(0)
             if len(self.queue_times) > 500:
@@ -392,15 +443,7 @@ class DynamicBatchPolicy(SchedulerPolicy):
             request.request_id = str(uuid.uuid4())
 
         # 1. Evaluate Admission
-        _, mem_used, mem_total = self.backend.get_gpu_telemetry()
-        admission = self.admission_controller.evaluate(
-            request=request,
-            current_queue_size=self.queue.size,
-            active_concurrency=max(len(self._active_requests), self.adaptive_controller.current_concurrency),
-            gpu_memory_used_mb=mem_used,
-            gpu_memory_total_mb=mem_total,
-            in_flight=len(self._active_requests),
-        )
+        admission = self._evaluate_admission(request)
 
         if not admission.admitted:
             self.total_rejected += 1
@@ -420,15 +463,7 @@ class DynamicBatchPolicy(SchedulerPolicy):
         if not request.request_id:
             request.request_id = str(uuid.uuid4())
 
-        _, mem_used, mem_total = self.backend.get_gpu_telemetry()
-        admission = self.admission_controller.evaluate(
-            request=request,
-            current_queue_size=self.queue.size,
-            active_concurrency=max(len(self._active_requests), self.adaptive_controller.current_concurrency),
-            gpu_memory_used_mb=mem_used,
-            gpu_memory_total_mb=mem_total,
-            in_flight=len(self._active_requests),
-        )
+        admission = self._evaluate_admission(request)
 
         if not admission.admitted:
             self.total_rejected += 1

@@ -119,8 +119,10 @@ class VLLMBackend(InferenceBackend):
                     parts = [p.strip() for p in result.stdout.strip().split(",")]
                     if len(parts) >= 3:
                         self._telemetry_cache = (int(parts[0]), int(parts[1]), int(parts[2]))
-            except Exception:
-                pass
+            except Exception as err:
+                if not getattr(self, "_telemetry_warned", False):
+                    self._telemetry_warned = True
+                    logger.warning("GPU telemetry unavailable (%s); memory-based limits are disabled.", err)
             self._telemetry_stop.wait(self._telemetry_interval)
 
     async def initialize(self) -> None:

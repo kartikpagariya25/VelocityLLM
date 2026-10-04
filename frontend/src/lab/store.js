@@ -79,7 +79,7 @@ export const ROWS = [
   ['p99_s', 'p99 latency', (v) => `${f2(v)} s`, 'low'],
   ['tokens_per_s', 'Tokens / s', (v) => v.toFixed(0), 'high'],
   ['within_sla_served', 'Within SLA (of served)', pctStr, 'high'],
-  ['within_sla_offered', 'Within SLA (of offered)', pctStr, 'high'],
+  ['within_sla_offered', 'Answered on time (of all users)', pctStr, 'high'],
   ['served', 'Served', (v) => v, null],
   ['rejected', 'Rejected', (v) => v, null],
   ['errors', 'Failed requests', (v) => v, null],
@@ -96,6 +96,10 @@ export const verdictOf = (v, lowerIsBetter) => {
 
 const phrase = (v, up, down) => (Math.abs(v) < NOISE ? 'about the same' : v < 0 ? `${Math.abs(v).toFixed(0)}% ${down}` : `${v.toFixed(0)}% ${up}`)
 
+export const onTime = (r) => Math.round((r.within_sla_offered || 0) * (r.offered || 0))
+
+export const unequalText = (s, d) => !!(s.tokens && d.tokens && Math.abs(d.tokens - s.tokens) / s.tokens > 0.1)
+
 export function sentence(cfg, s, d, users, repeats = 1) {
   if (!s || !d) return ''
   if (!s.served || !d.served) {
@@ -104,19 +108,20 @@ export function sentence(cfg, s, d, users, repeats = 1) {
   }
   const n = users ?? cfg.users
   const p99 = change(s.p99_s, d.p99_s)
-  const p50 = change(s.p50_s, d.p50_s)
   const tok = change(s.tokens_per_s, d.tokens_per_s)
-  const head = `With ${n} users on ${cfg.traffic} traffic and a ${cfg.sla.toFixed(1)} s SLA, Dynamic's p99 latency was ${f2(d.p99_s)} s against ${f2(s.p99_s)} s for Static (${phrase(p99, 'higher', 'lower')}), its median latency was ${phrase(p50, 'higher', 'lower')}, and its throughput was ${phrase(tok, 'higher', 'lower')}.`
-  const shed = d.rejected ? ` It rejected ${d.rejected} of ${d.offered} requests; Static rejected ${s.rejected}.` : ' It rejected no requests.'
-  const gap = d.within_sla_offered - s.within_sla_offered
-  const sla =
-    Math.abs(gap) < 0.01
-      ? ` Counted against all offered requests, the share finishing within the SLA was the same (${pctStr(d.within_sla_offered)})${d.rejected > s.rejected ? ': Dynamic turned late replies into early rejections rather than into extra on-time replies' : ''}.`
-      : ` Counted against all offered requests, ${pctStr(d.within_sla_offered)} finished within the SLA against ${pctStr(s.within_sla_offered)} for Static.`
+  const onS = onTime(s)
+  const onD = onTime(d)
+  const head = `With ${n} users on ${cfg.traffic} traffic and a ${cfg.sla.toFixed(1)} s SLA, Static answered ${onS} on time and Dynamic answered ${onD}.`
+  const lat = ` Dynamic's slowest replies took ${f2(d.p99_s)} s against ${f2(s.p99_s)} s for Static (${phrase(p99, 'higher', 'lower')}).`
+  const shed = d.rejected
+    ? ` It declined ${d.rejected} of ${d.offered} requests it could not finish in time; Static accepted every request and ${Math.max(0, s.served - onS)} of its replies came late.`
+    : ' It declined no requests.'
+  const speed = unequalText(s, d)
+    ? ` Throughput is not compared because the schedulers answered different amounts of text (${s.tokens} against ${d.tokens} tokens).`
+    : ` Throughput was ${phrase(tok, 'higher', 'lower')}.`
   const zero = Math.max(s.zero_token_share || 0, d.zero_token_share || 0) > 0.5 ? ' Warning: most replies had zero tokens, so these numbers are not meaningful for this model.' : ''
-  const unequal = s.tokens && d.tokens && Math.abs(d.tokens - s.tokens) / s.tokens > 0.1 ? ` Note: the two schedulers wrote different amounts of text (${s.tokens} against ${d.tokens} tokens), so latency and throughput are not strictly comparable.` : ''
   const once = repeats > 1 ? '' : ' This is a single run; differences under 5% are normal run-to-run variation.'
-  return head + shed + sla + zero + unequal + once
+  return head + lat + shed + speed + zero + once
 }
 
 export function sweepSentence(cfg, levels, data) {
@@ -127,11 +132,9 @@ export function sweepSentence(cfg, levels, data) {
   const d = data.dynamic[top]
   if (!s.served || !d.served) return `At ${top} users ${!d.served ? 'Dynamic' : 'Static'} answered no requests, so the heaviest level cannot be compared. Check the warnings and the execution log, then run again.`
   const p99 = change(s.p99_s, d.p99_s)
-  const sServed = s.within_sla_served
-  const dServed = d.within_sla_served
   const wins = done.filter((n) => verdictOf(change(data.static[n].p99_s, data.dynamic[n].p99_s), true) === 'better')
   const lead = wins.length ? `Dynamic had clearly lower p99 latency at ${wins.join(', ')} users.` : 'Dynamic did not have clearly lower p99 latency at any tested load.'
-  return `${lead} At the heaviest load (${top} users) the p99 latency of answered requests was ${f2(d.p99_s)} s for Dynamic and ${f2(s.p99_s)} s for Static (${phrase(p99, 'higher', 'lower')}). ${pctStr(dServed)} of Dynamic's answered requests met the ${cfg.sla.toFixed(1)} s SLA against ${pctStr(sServed)} for Static, and Dynamic rejected ${d.rejected} of ${d.offered} requests while Static rejected ${s.rejected}. Counted against every user, ${pctStr(d.within_sla_offered)} of Dynamic and ${pctStr(s.within_sla_offered)} of Static finished on time.`
+  return `${lead} At the heaviest load (${top} users) the slowest replies took ${f2(d.p99_s)} s for Dynamic and ${f2(s.p99_s)} s for Static (${phrase(p99, 'higher', 'lower')}). Static answered ${onTime(s)} of ${s.offered} users on time and Dynamic ${onTime(d)}; Dynamic declined ${d.rejected} requests it could not finish in time, while Static declined ${s.rejected}.`
 }
 
 export function toCsv(s) {

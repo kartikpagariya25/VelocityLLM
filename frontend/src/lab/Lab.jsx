@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { MODELS, PROMPTS, TRAFFIC, LIMITS, customTokens } from './sim'
 import { startSimRun, startSimSweep, stepsFor } from './runner'
 import { startLiveRun, probe } from './live'
-import { newStore, apply, ROWS, change, sentence, verdictOf, toCsv, download, logLine, f2 } from './store'
+import { newStore, apply, ROWS, change, sentence, verdictOf, toCsv, download, logLine, f2, onTime, unequalText } from './store'
 import { drawTimeline, drawConcurrency, niceMax } from './charts'
 import Info from './Info'
+import Count from './Count'
 import Pressure from './Pressure'
 import Saved from './Saved'
 import { startReplay, configOf } from './replay'
@@ -81,6 +82,14 @@ function Panel({ name, policy, store, onPick }) {
       </div>
       <p className="cap">
         Request timeline <Info id="timeline" />
+      </p>
+      <p className="key">
+        <i className="dot dot--ok" />
+        on time
+        <i className="dot dot--late" />
+        late
+        <i className="dot dot--rej" />
+        declined
       </p>
       <canvas ref={cv} className="timeline" onClick={click} aria-label={`${name} request timeline`} />
     </section>
@@ -197,21 +206,24 @@ function Results({ store, label, recordingUrl }) {
       {s && d && (
         <div className="heads">
           {[
-            ['Throughput (tokens/s)', 'tokens per second', s.tokens_per_s, d.tokens_per_s, (v) => v.toFixed(0), false, 'tokps'],
+            ['Answered on time', `of ${s.offered || d.offered || '?'} users`, onTime(s), onTime(d), (v) => `${Math.round(v)}`, false, 'slaOffered'],
             ['p99 latency', 'seconds, lower is better', s.p99_s, d.p99_s, (v) => `${v.toFixed(2)} s`, true, 'p99'],
-            ['Finished on time', 'of all users', s.within_sla_offered, d.within_sla_offered, (v) => `${Math.round(v * 100)}%`, false, 'slaOffered'],
+            ['Throughput (tokens/s)', 'tokens per second', s.tokens_per_s, d.tokens_per_s, (v) => v.toFixed(0), false, 'tokps'],
           ].map(([name, hint, a, b, fmt, low, info]) => {
+            const same = info === 'tokps' && unequalText(s, d)
             const delta = change(a, b)
-            const v = delta == null ? 'same' : verdictOf(delta, low)
+            const v = same || delta == null ? 'same' : verdictOf(delta, low)
             return (
               <div key={name} className={`head head--${v}`}>
                 <span>
                   {name} <Info id={info} />
                 </span>
                 <b>
-                  {fmt(a)} <i>to</i> {fmt(b)}
+                  <Count value={a} fmt={fmt} /> <i>to</i> <Count value={b} fmt={fmt} />
                 </b>
-                <em>{delta == null || Math.abs(delta) < 0.5 ? hint : `${delta > 0 ? '+' : ''}${delta.toFixed(0)}% for Dynamic`}</em>
+                <em>
+                  {same ? 'Not comparable: different amount of text' : delta == null || Math.abs(delta) < 0.5 ? hint : `${delta > 0 ? '+' : ''}${delta.toFixed(0)}% for Dynamic`}
+                </em>
               </div>
             )
           })}
