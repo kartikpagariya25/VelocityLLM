@@ -115,3 +115,19 @@ async def test_dynamic_policy_keeps_serving_when_controller_breaks():
     res = await asyncio.wait_for(policy.schedule(InferenceRequest(prompt="hello", max_tokens=8)), timeout=5)
     assert res.tokens_generated > 0
     await policy.shutdown()
+
+
+class _CountingBackend(MockBackend):
+    def pop_token_count(self, request_id):
+        return 77
+
+
+@pytest.mark.asyncio
+async def test_policies_report_the_backend_token_count_not_the_chunk_count():
+    config = ServerConfig(initial_concurrency=2, min_concurrency=1, max_concurrency=4, target_sla_ms=5000.0)
+    for policy_cls in (StaticBatchPolicy, DynamicBatchPolicy):
+        policy = policy_cls(backend=_CountingBackend(tokens_per_second=300.0, simulated_ttft_seconds=0.01), config=config)
+        await policy.initialize()
+        res = await policy.schedule(InferenceRequest(prompt="hello", max_tokens=8))
+        assert res.tokens_generated == 77
+        await policy.shutdown()
