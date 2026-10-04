@@ -1,5 +1,5 @@
 import argparse
-import csv
+import asyncio
 import json
 import subprocess
 import sys
@@ -8,18 +8,24 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from control_service.loadgen import build_plan, run_load  # noqa: E402
+from control_service.scoring import score  # noqa: E402
+
 OUT = ROOT / "results" / "probe"
 
 
-def start_server(args, limit):
+def start_server(args, policy, limit):
     OUT.mkdir(parents=True, exist_ok=True)
     log = open(OUT / "server.log", "ab")
     cmd = [
-        sys.executable, "-m", "scheduler_engine.server", "--policy", "static",
-        "--initial-concurrency", str(limit), "--max-concurrency", str(max(limit, 32)),
+        sys.executable, "-m", "scheduler_engine.server", "--policy", policy,
         "--sla-ms", str(args.sla * 1000), "--port", str(args.port), "--model-path", args.model_path,
         "--max-model-len", str(args.max_model_len),
     ]
+    if policy == "static":
+        cmd += ["--initial-concurrency", str(limit), "--max-concurrency", str(max(limit, 32))]
     if args.mock:
         cmd.append("--mock")
     proc = subprocess.Popen(cmd, cwd=ROOT, stdout=log, stderr=log)
@@ -46,27 +52,10 @@ def stop_server(proc, settle):
     time.sleep(settle)
 
 
-def load(args, users, name):
-    out = OUT / f"{name}.csv"
-    subprocess.run(
-        [sys.executable, str(ROOT / "load_generator" / "generate_load.py"),
-         "--url", f"http://localhost:{args.port}/generate", "--num-requests", str(users),
-         "--concurrency", str(users), "--pattern", "flood", "--seed", str(args.seed),
-         "--output", str(out), "--label", name],
-        cwd=ROOT, check=True, stdout=subprocess.DEVNULL,
-    )
-    summary = json.loads(out.with_name(out.stem + "_summary.json").read_text())
-    with open(out, newline="") as f:
-        tokens = sum(int(float(r["tokens_generated"] or 0)) for r in csv.DictReader(f) if r["status"] == "200")
-    wall = summary["wall_time_seconds"]
-    return {
-        "tokens": tokens,
-        "wall": wall,
-        "tok_s": tokens / wall if wall else 0.0,
-        "p50": summary["p50_latency_seconds"],
-        "p99": summary["p99_latency_seconds"],
-        "gpu": summary["avg_gpu_util_percent"],
-    }
+def load(args, users, scenario="flood", preset="medium", max_tokens=None):
+    plan = build_plan(scenario, users, args.seed, preset, None, max_tokens=max_tokens)
+    rows, wall = asyncio.run(run_load(f"http://localhost:{args.port}", plan, 600.0))
+    return score(rows, args.sla, wall), wall
 
 
 def main():
@@ -80,29 +69,35 @@ def main():
     p.add_argument("--max-model-len", type=int, default=4096)
     p.add_argument("--startup-timeout", type=int, default=240)
     p.add_argument("--settle", type=float, default=5.0)
+    p.add_argument("--scenario", choices=["flood", "mixed"], default="flood")
+    p.add_argument("--preset", choices=["short", "medium", "long"], default="medium")
+    p.add_argument("--dynamic", action="store_true", help="also run the dynamic policy on the same traffic")
     p.add_argument("--mock", action="store_true")
     args = p.parse_args()
 
+    configs = [("static", limit) for limit in args.limits] + ([("dynamic", None)] if args.dynamic else [])
     table = []
-    for limit in args.limits:
-        print(f"limit {limit}: starting static server")
-        proc = start_server(args, limit)
+    for policy, limit in configs:
+        name = f"static limit {limit}" if policy == "static" else "dynamic"
+        print(f"{name}: starting server")
+        proc = start_server(args, policy, limit)
         try:
-            load(args, 8, "warmup")
+            load(args, 8, "flood", "short", 50)
             for users in args.users:
                 time.sleep(args.settle)
-                result = load(args, users, f"limit{limit}_users{users}")
-                table.append((limit, users, result))
-                print(f"  {users} users done: {result['tok_s']:.0f} tokens/s")
+                result, wall = load(args, users, args.scenario, args.preset)
+                table.append((name, users, wall, result))
+                print(f"  {users} users done: {result['tokens_per_s']:.0f} tokens/s")
         finally:
             stop_server(proc, args.settle)
 
-    print(f"\n{'limit':>6}{'users':>7}{'wall s':>9}{'tokens':>8}{'tok/s':>8}{'p50 s':>8}{'p99 s':>8}{'gpu %':>7}")
-    for limit, users, r in table:
-        gpu = "-" if r["gpu"] is None else f"{r['gpu']:.0f}"
-        print(f"{limit:>6}{users:>7}{r['wall']:>9.1f}{r['tokens']:>8}{r['tok_s']:>8.0f}{r['p50']:>8.2f}{r['p99']:>8.2f}{gpu:>7}")
+    print(f"\n{'setup':<16}{'users':>6}{'wall s':>8}{'served':>8}{'on time':>9}{'tok/s':>7}{'goodput':>9}{'p50 s':>7}{'p99 s':>7}")
+    for name, users, wall, r in table:
+        on_time = round(r["within_sla_offered"] * r["offered"])
+        print(f"{name:<16}{users:>6}{wall:>8.1f}{r['served']:>8}{on_time:>9}{r['tokens_per_s']:>7.0f}"
+              f"{r['goodput_tokens_per_s']:>9.0f}{r['p50_s']:>7.2f}{r['p99_s']:>7.2f}")
     (OUT / "probe_summary.json").write_text(json.dumps(
-        [{"limit": l, "users": u, **r} for l, u, r in table], indent=2))
+        [{"setup": n, "users": u, "wall_s": w, **r} for n, u, w, r in table], indent=2))
     print(f"\nSaved: {OUT / 'probe_summary.json'}")
 
 
