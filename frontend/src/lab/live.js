@@ -1,4 +1,4 @@
-const EVENTS = ['phase', 'log', 'metrics', 'request', 'result', 'done', 'error', 'info']
+const EVENTS = ['phase', 'log', 'metrics', 'request', 'result', 'level_result', 'done', 'error', 'info']
 
 const clean = (base) => base.trim().replace(/\/+$/, '')
 
