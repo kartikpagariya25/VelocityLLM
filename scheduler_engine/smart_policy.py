@@ -152,7 +152,7 @@ class SmartBatchPolicy(DynamicBatchPolicy):
     def _learn_kv_model(self) -> None:
         if not self.smart.kv_auto:
             return
-        fp = derive_footprint(self.config.model_path)
+        fp = derive_footprint(self.config.model_path, dtype_bytes=1 if self.config.kv_cache_dtype == "fp8" else 2)
         if fp is not None:
             self.smart.kv_bytes_per_token = fp.kv_bytes_per_token
             self.smart.model_weights_mb = fp.weights_mb

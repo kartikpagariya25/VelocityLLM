@@ -151,6 +151,8 @@ class VLLMBackend(InferenceBackend):
                 max_num_seqs=self.config.max_concurrency,
                 enable_prefix_caching=True,
             )
+            if getattr(self.config, "kv_cache_dtype", "auto") != "auto":
+                engine_kwargs["kv_cache_dtype"] = self.config.kv_cache_dtype
             if self.config.vision:
                 engine_kwargs["limit_mm_per_prompt"] = {"image": 1}
                 engine_kwargs["mm_processor_kwargs"] = {"max_pixels": vision.MAX_PIXELS}

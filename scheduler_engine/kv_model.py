@@ -47,14 +47,14 @@ def weights_mb_from_dir(path: str) -> Optional[int]:
     return int(total / (1024 * 1024)) if total else None
 
 
-def derive_footprint(model_path: str, overhead_mb: int = 600) -> Optional[ModelFootprint]:
+def derive_footprint(model_path: str, overhead_mb: int = 600, dtype_bytes: int = 2) -> Optional[ModelFootprint]:
     cfg_path = os.path.join(str(model_path), "config.json")
     try:
         with open(cfg_path, "r", encoding="utf-8") as fh:
             cfg = json.load(fh)
     except (OSError, ValueError):
         return None
-    kv = kv_bytes_from_config(cfg)
+    kv = kv_bytes_from_config(cfg, dtype_bytes)
     if not kv:
         return None
     weights = weights_mb_from_dir(str(model_path))

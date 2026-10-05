@@ -83,3 +83,21 @@ async def test_predictive_ramp_reaches_selected_capacity_faster_than_aimd():
             await policy.shutdown()
 
     assert await peak(True) > await peak(False)
+
+
+def test_fp8_halves_kv_bytes_per_token(tmp_path):
+    (tmp_path / "config.json").write_text(json.dumps(
+        {"num_hidden_layers": 28, "num_attention_heads": 16, "num_key_value_heads": 2, "hidden_size": 1536}))
+    (tmp_path / "model.safetensors").write_bytes(b"0" * 1024 * 1024)
+    half = derive_footprint(str(tmp_path), dtype_bytes=1)
+    full = derive_footprint(str(tmp_path), dtype_bytes=2)
+    assert half.kv_bytes_per_token * 2 == full.kv_bytes_per_token
+
+
+def test_env_overrides_reach_the_smart_config(monkeypatch, tmp_path):
+    from control_service.smartcfg import env_overrides
+    monkeypatch.setenv("VELOCITY_SMART_OVERRIDES", "predictive_ramp=false, kv_auto=false")
+    assert env_overrides() == {"predictive_ramp": "false", "kv_auto": "false"}
+    cfg = SmartConfig()
+    cfg.update(env_overrides())
+    assert cfg.predictive_ramp is False and cfg.kv_auto is False
