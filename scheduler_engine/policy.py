@@ -287,6 +287,8 @@ class DynamicBatchPolicy(SchedulerPolicy):
         self.exec_times: List[float] = []
         self._memory_baseline_mb: Optional[int] = None
         self.backend_ready = False
+        self._last_telemetry: Tuple[float, int, int] = (0.0, 0, 0)
+        self._max_attempts = 2
 
         # Phase 3 Telemetry
         self.client_disconnects_count = 0
@@ -295,8 +297,19 @@ class DynamicBatchPolicy(SchedulerPolicy):
         self.validation_errors_count = 0
 
     def _request_weight(self, request: InferenceRequest) -> float:
-        """Concurrency slots a request occupies: one, plus one more per image_slot_tokens of image prefill."""
-        return 1.0 + request.image_tokens / max(1, self.config.image_slot_tokens)
+        return self.admission_controller.slot_weight(request.image_tokens)
+
+    def _active_load(self) -> float:
+        return sum(self._active_weights.values())
+
+    def _telemetry(self) -> Tuple[float, int, int]:
+        """GPU telemetry that never raises: falls back to the last good reading."""
+        try:
+            util, mem_used, mem_total = self.backend.get_gpu_telemetry()
+            self._last_telemetry = (float(util), int(mem_used), int(mem_total))
+        except Exception as err:
+            logger.warning("GPU telemetry unavailable (%s); using the last known reading.", err)
+        return self._last_telemetry
 
     def _release(self, request_id: str) -> None:
         self._active_requests.pop(request_id, None)
@@ -320,7 +333,7 @@ class DynamicBatchPolicy(SchedulerPolicy):
 
     def _evaluate_admission(self, request: InferenceRequest):
         try:
-            _, mem_used, mem_total = self.backend.get_gpu_telemetry()
+            _, mem_used, mem_total = self._telemetry()
             return self.admission_controller.evaluate(
                 request=request,
                 current_queue_size=self.queue.size,
@@ -386,7 +399,7 @@ class DynamicBatchPolicy(SchedulerPolicy):
         """
         while not self._stop_event.is_set():
             try:
-                util, mem_used, mem_total = self.backend.get_gpu_telemetry()
+                util, mem_used, mem_total = self._telemetry()
                 breach, headroom = self._service_signals()
 
                 try:
@@ -395,7 +408,7 @@ class DynamicBatchPolicy(SchedulerPolicy):
                         gpu_memory_used_mb=mem_used,
                         gpu_memory_total_mb=mem_total,
                         queue_depth=self.queue.size,
-                        active_requests=len(self._active_requests),
+                        active_requests=self._active_load(),
                         recent_sla_breach=breach,
                         service_headroom=headroom,
                         gpu_memory_baseline_mb=self._memory_baseline(mem_used),
@@ -406,7 +419,7 @@ class DynamicBatchPolicy(SchedulerPolicy):
 
                 await self._drop_hopeless()
 
-                while self.queue.size > 0 and sum(self._active_weights.values()) < effective_limit:
+                while self.queue.size > 0 and self._active_load() < effective_limit:
                     entry = await self.queue.dequeue(timeout=0.01)
                     if entry is None:
                         break
@@ -433,11 +446,27 @@ class DynamicBatchPolicy(SchedulerPolicy):
         chunks: List[str] = []
 
         try:
-            async for chunk in self.backend.generate_stream(
-                request.prompt, request.max_tokens, request.temperature, request.request_id,
-                    image=request.image,
-            ):
-                chunks.append(chunk)
+            for attempt in range(self._max_attempts):
+                chunks.clear()
+                try:
+                    async for chunk in self.backend.generate_stream(
+                        request.prompt, request.max_tokens, request.temperature, request.request_id,
+                        image=request.image,
+                    ):
+                        chunks.append(chunk)
+                    break
+                except asyncio.CancelledError:
+                    raise
+                except Exception as err:
+                    retryable = not chunks and attempt + 1 < self._max_attempts
+                    if isinstance(err, GPUOutOfMemoryError):
+                        self.oom_recoveries_count += 1
+                        self.adaptive_controller.trigger_emergency_oom_throttle(cooldown_seconds=2.0)
+                        self.backend.handle_oom()
+                    if not retryable:
+                        raise
+                    logger.warning("Request %s failed before output (%s); retrying.", request.request_id, err)
+                    await asyncio.sleep(0.2 * (attempt + 1))
 
             total_latency = time.time() - entry.enqueue_time
             exec_time = time.time() - start_exec
@@ -463,7 +492,10 @@ class DynamicBatchPolicy(SchedulerPolicy):
 
             # Update admission controller service-time estimate
             self.total_image_tokens += request.image_tokens
-            self.admission_controller.update_completion_stats(exec_time, token_count, request.image_tokens)
+            try:
+                self.admission_controller.update_completion_stats(exec_time, token_count, request.image_tokens)
+            except Exception as err:
+                logger.error("Service-time update failed (%s); estimates unchanged.", err)
 
             tps = (token_count / exec_time) if exec_time > 0 else 0.0
 
@@ -488,14 +520,8 @@ class DynamicBatchPolicy(SchedulerPolicy):
             if not entry.future.done():
                 entry.future.cancel()
             raise
-        except GPUOutOfMemoryError as oom_err:
-            self.oom_recoveries_count += 1
-            logger.error("GPU OOM encountered during execution of request %s: %s", request.request_id, oom_err)
-            self.adaptive_controller.trigger_emergency_oom_throttle(cooldown_seconds=2.0)
-            self.backend.handle_oom()
-            if not entry.future.done():
-                entry.future.set_exception(oom_err)
         except Exception as err:
+            logger.error("Request %s failed: %s", request.request_id, err)
             if not entry.future.done():
                 entry.future.set_exception(err)
         finally:
