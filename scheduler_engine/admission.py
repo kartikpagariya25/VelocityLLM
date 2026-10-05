@@ -35,6 +35,8 @@ class AdmissionController:
         # Exponential moving averages for service times
         self._ema_token_time = 0.015  # ~15ms per token initial baseline
         self._ema_service_time = 1.2   # ~1.2s average request service time
+        self._ema_prefill_time = 0.0002  # seconds of prefill per image token (~5,000 tokens/s)
+        self._max_prefill_time = 0.002
         self._alpha = 0.1             # Smoothing factor for EMA updates
         self._max_sample_growth = 2.0  # A single sample may at most double the estimate
         self._baseline_token_time = self._ema_token_time
@@ -50,11 +52,17 @@ class AdmissionController:
         self.total_burst_shed = 0
         self.total_dropped_waiting = 0
 
-    def update_completion_stats(self, latency_seconds: float, tokens_generated: int) -> None:
+    def update_completion_stats(self, latency_seconds: float, tokens_generated: int, image_tokens: int = 0) -> None:
         """Update service time estimation metrics from completed requests."""
         if latency_seconds <= 0:
             return
         self._last_completion = time.monotonic()
+
+        if image_tokens > 0:
+            decode_estimate = 0.05 + tokens_generated * self._ema_token_time
+            sample = min(max((latency_seconds - decode_estimate) / image_tokens, 0.0), self._max_prefill_time)
+            self._ema_prefill_time = (self._alpha * sample) + ((1.0 - self._alpha) * self._ema_prefill_time)
+            latency_seconds = max(latency_seconds - image_tokens * self._ema_prefill_time, 0.1 * latency_seconds)
 
         service_sample = min(latency_seconds, self._ema_service_time * self._max_sample_growth)
         self._ema_service_time = (self._alpha * service_sample) + (
@@ -90,21 +98,26 @@ class AdmissionController:
         return float(base)
 
     def estimate_wait_time(
-        self, current_queue_size: int, active_concurrency: int, concurrency_ceiling: Optional[int] = None
+        self,
+        current_queue_size: int,
+        active_concurrency: int,
+        concurrency_ceiling: Optional[int] = None,
+        queued_image_tokens: int = 0,
     ) -> float:
         """
         Estimate queueing wait time in seconds before an arriving request begins execution.
-        E[wait] = (queue_length * avg_service_time) / projected parallel slots
+        E[wait] = (queue_length * avg_service_time + queued image prefill) / projected parallel slots
         """
         slots = self.projected_slots(active_concurrency, concurrency_ceiling)
-        return (current_queue_size * self._ema_service_time) / slots
+        work = current_queue_size * self._ema_service_time + queued_image_tokens * self._ema_prefill_time
+        return work / slots
 
-    def estimate_execution_time(self, max_tokens: int) -> float:
+    def estimate_execution_time(self, max_tokens: int, image_tokens: int = 0) -> float:
         """
         Estimate execution generation duration for a request.
         """
-        # Prefill / TTFT base + generation phase
-        return 0.05 + (max_tokens * self._ema_token_time)
+        # Prefill / TTFT base + image prefill + generation phase
+        return 0.05 + image_tokens * self._ema_prefill_time + (max_tokens * self._ema_token_time)
 
     def sla_limit_seconds(self, request: InferenceRequest) -> float:
         """SLA the request is judged against, including the extra grace HIGH priority gets."""
@@ -113,7 +126,7 @@ class AdmissionController:
 
     def is_hopeless(self, request: InferenceRequest, waited_seconds: float) -> bool:
         """True when the request would miss its SLA even if it ran at twice the usual speed."""
-        optimistic_exec = 0.5 * self.estimate_execution_time(request.max_tokens)
+        optimistic_exec = 0.5 * self.estimate_execution_time(request.max_tokens, request.image_tokens)
         return waited_seconds + optimistic_exec > self.sla_limit_seconds(request)
 
     def evaluate(
@@ -126,6 +139,7 @@ class AdmissionController:
         in_flight: Optional[int] = None,
         gpu_memory_baseline_mb: Optional[int] = None,
         concurrency_ceiling: Optional[int] = None,
+        queued_image_tokens: int = 0,
     ) -> AdmissionResult:
         """
         Evaluate whether to admit or reject an incoming request.
@@ -139,7 +153,7 @@ class AdmissionController:
             or gpu_memory_total_mb <= 0
             or gpu_memory_used_mb - gpu_memory_baseline_mb >= 0.03 * gpu_memory_total_mb
         )
-        est_wait = self.estimate_wait_time(current_queue_size, active_concurrency, concurrency_ceiling)
+        est_wait = self.estimate_wait_time(current_queue_size, active_concurrency, concurrency_ceiling, queued_image_tokens)
 
         # 1. Check Hard Queue Capacity Limit
         if current_queue_size >= self.max_queue_size:
@@ -176,7 +190,7 @@ class AdmissionController:
 
         # 3. SLA Target Headroom Verification
         target_sla_sec = (request.sla_target_ms or self.default_sla_ms) / 1000.0
-        est_exec = self.estimate_execution_time(request.max_tokens)
+        est_exec = self.estimate_execution_time(request.max_tokens, request.image_tokens)
         est_total_latency = est_wait + est_exec
 
         # Allow HIGH priority requests slightly more grace headroom (1.35x)
@@ -258,12 +272,13 @@ class AdmissionController:
         if gpu_memory_total_mb > 0:
             mem_utilization = gpu_memory_used_mb / gpu_memory_total_mb
             soft_limit = getattr(self.config, "soft_memory_limit_ratio", 0.88)
-            if mem_utilization >= soft_limit and memory_grew and request.priority != RequestPriority.HIGH:
+            heavy_image = request.image_tokens >= getattr(self.config, "heavy_image_tokens", 768)
+            if mem_utilization >= soft_limit and memory_grew and (request.priority != RequestPriority.HIGH or heavy_image):
                 self.total_rejected_overload += 1
                 return AdmissionResult(
                     status=AdmissionStatus.REJECTED_OVERLOAD,
                     admitted=False,
-                    reason=f"GPU memory soft limit reached ({mem_utilization*100:.1f}% >= {soft_limit*100:.0f}%). Shedding non-urgent traffic.",
+                    reason=f"GPU memory soft limit reached ({mem_utilization*100:.1f}% >= {soft_limit*100:.0f}%). Shedding {'heavy image' if heavy_image else 'non-urgent'} traffic.",
                     estimated_delay_seconds=1.0,
                     retry_after_seconds=1.0,
                 )
@@ -290,4 +305,5 @@ class AdmissionController:
             "total_dropped_waiting": self.total_dropped_waiting,
             "ema_service_time_seconds": round(self._ema_service_time, 4),
             "ema_token_time_seconds": round(self._ema_token_time, 5),
+            "ema_prefill_seconds_per_image_token": round(self._ema_prefill_time, 6),
         }

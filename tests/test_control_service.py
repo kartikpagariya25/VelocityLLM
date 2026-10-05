@@ -147,3 +147,46 @@ def test_engine_command_adds_vision_flag():
     vision = Engine(Settings(), "dynamic", "mock-vision", 8000, 8100, True, noop, vision=True)
     assert "--vision" not in plain.command()
     assert "--vision" in vision.command()
+
+
+def test_vision_plan_attaches_images_and_token_counts():
+    from control_service.loadgen import build_plan
+
+    plan = build_plan("flood", 40, 3, "short", None, vision=True, image_mix="mixed")
+    assert all(item["image"] and item["image_tokens"] in (64, 256, 1024) for item in plan)
+    assert {item["image_tokens"] for item in plan} == {64, 256, 1024}
+    large = build_plan("flood", 10, 3, "short", None, vision=True, image_mix="large")
+    assert {item["image_tokens"] for item in large} == {1024}
+    assert "image" not in build_plan("flood", 5, 3, "short", None)[0]
+    assert build_plan("flood", 20, 9, "short", None, vision=True) == build_plan("flood", 20, 9, "short", None, vision=True)
+
+
+def test_score_reports_image_tokens():
+    rows = [
+        {**row("served", 0, 1), "image_tokens": 256},
+        {**row("served", 0, 2), "image_tokens": 1024},
+        {**row("rejected", 0, 0.1, 0), "image_tokens": 64},
+    ]
+    r = score(rows, 8.0, 4.0)
+    assert r["image_tokens"] == 1280
+    assert r["image_tokens_per_s"] == pytest.approx(320.0)
+
+
+def test_mock_vision_run_end_to_end(tmp_path):
+    import time
+
+    s = Settings(mock=True, results_dir=tmp_path, frontend_dir=tmp_path / "none", settle_seconds=0.1)
+    with TestClient(create_app(s)) as c:
+        res = c.post("/api/runs", json={"model": "mock-vision", "requests": 6, "scenario": "flood", "image_mix": "mixed", "prompt_preset": "short"})
+        assert res.status_code == 202
+        run_id = res.json()["run_id"]
+        for _ in range(120):
+            state = c.get(f"/api/runs/{run_id}").json()
+            if state["status"] in ("completed", "failed"):
+                break
+            time.sleep(0.5)
+        assert state["status"] == "completed", state
+        for policy in ("static", "dynamic"):
+            result = state["results"]["results"][policy]
+            assert result["served"] > 0
+            assert result["image_tokens"] > 0

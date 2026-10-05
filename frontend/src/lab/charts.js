@@ -111,6 +111,10 @@ export const drawTimeline = guard(function drawTimeline(canvas, reqs, sla, tMax,
         ctx.fillRect(X(r.arrival_s + sla), y, 1, bh)
       }
     }
+    if ((r.image_tokens || 0) >= 768) {
+      ctx.fillStyle = C.ink
+      ctx.fillRect(X(r.arrival_s), y, 2, bh)
+    }
     hit.push({ y, h: rh, r })
   })
   if (moving) later(canvas, () => drawTimeline(canvas, reqs, sla, tMax, hit))

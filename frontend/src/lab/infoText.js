@@ -36,4 +36,8 @@ export const INFO = {
   saved: ['Saved benchmarks', 'Every real run is saved by the control service. You can replay a saved run later without any GPU, which is what you use in front of judges.'],
   replay: ['Replay', 'Plays a saved real run again with the same logs, timeline and numbers, at the original or a faster speed. It is marked as a recorded run so nobody mistakes it for a live one.'],
   repeats: ['Repeats', 'Runs the whole comparison several times, alternating which scheduler goes first, and reports the median. One run can be thrown off by a warm or cold GPU, so 3 or 5 repeats give a fairer answer but take longer.'],
+  vision: ['Vision workload', 'With a vision model every user sends one image together with a question. The image is turned into vision tokens that the GPU must process before it can write the first word, so a large image is much heavier than a short text prompt.'],
+  imageMix: ['Image sizes', 'Small images use about 64 vision tokens, medium about 256 and large about 1024. Static counts every request the same. Dynamic counts a large image as more than one slot and estimates its extra waiting time, so a few heavy images do not push light requests past their deadline.'],
+  imageTokens: ['Image tokens', 'How many vision tokens the answered requests carried in total. It shows how much image work the scheduler really finished.'],
+  bigImages: ['Big images', 'Large images (about 1024 vision tokens) answered within the SLA, out of all large images that arrived. They are the first to be declined when GPU memory gets tight.'],
 }

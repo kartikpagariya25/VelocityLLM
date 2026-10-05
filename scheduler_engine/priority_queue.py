@@ -54,6 +54,10 @@ class PrioritizedRequestQueue:
     def size(self) -> int:
         return len(self._entry_map)
 
+    @property
+    def image_tokens_waiting(self) -> int:
+        return sum(entry.request.image_tokens for entry in self._entry_map.values())
+
     async def enqueue(self, request: InferenceRequest) -> asyncio.Future:
         """
         Enqueue an inference request. Returns a Future that will be resolved

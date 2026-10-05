@@ -133,7 +133,7 @@ class Orchestrator:
         await run.emit("info", {
             "gpu": report["gpu"], "model": cfg["model"], "mock": mock, "sla_s": sla_s, "users": max(levels_cfg), "levels": levels_cfg,
             "environment": env,
-            "scenario": cfg["scenario"], "repeats": cfg["repeats"], "seed": cfg["seed"], "recorded": False,
+            "scenario": cfg["scenario"], "vision": info["vision"], "image_mix": cfg.get("image_mix", "mixed") if info["vision"] else None, "repeats": cfg["repeats"], "seed": cfg["seed"], "recorded": False,
         })
         if run.warning:
             await self.log(run, None, run.warning, "system", "WARNING")
@@ -201,7 +201,7 @@ class Orchestrator:
                 raise RunFailed(f"{policy.capitalize()} engine failed to start: {e}", e.tail)
             await self.log(run, policy, f"Engine healthy on port {port}")
             await self.phase(run, f"{policy}_warmup", policy, rnd)
-            warm = build_plan("flood", 8, 1, "short", None, max_tokens=50)
+            warm = build_plan("flood", 8, 1, "short", None, max_tokens=50, vision=vision, image_mix="mixed")
             for _ in range(2):
                 warm_rows, _wall = await run_load(engine.base, warm, s.request_timeout, None, "warm")
                 if warm_rows and all(r["status"] == "error" for r in warm_rows):
@@ -211,7 +211,7 @@ class Orchestrator:
             for n in levels:
                 await self._settle(s.settle_seconds)
                 base = await engine.stats() or {}
-                plan = build_plan(cfg["scenario"], n, cfg["seed"] + rnd, cfg["prompt_preset"], cfg["prompt_text"])
+                plan = build_plan(cfg["scenario"], n, cfg["seed"] + rnd, cfg["prompt_preset"], cfg["prompt_text"], vision=vision, image_mix=cfg.get("image_mix", "mixed"))
                 await run.emit("phase", {"phase": f"{policy}_load", "policy": policy, "repeat": rnd, "level": n, "ts": time.time()})
                 if len(levels) > 1:
                     await self.log(run, policy, f"Load level: {n} users")
@@ -223,7 +223,7 @@ class Orchestrator:
                         "policy": policy, "request_id": row["request_id"], "arrival_s": round(row["arrival_s"], 3),
                         "start_s": None if row["start_s"] is None else round(row["start_s"], 3),
                         "end_s": round(row["end_s"], 3), "status": row["status"], "http_status": row["http_status"],
-                        "tokens": row["tokens"], "priority": row["priority"], "reject_reason": row["reject_reason"],
+                        "tokens": row["tokens"], "image_tokens": row["image_tokens"], "priority": row["priority"], "reject_reason": row["reject_reason"],
                         "retry_after_s": row["retry_after_s"], "error": row["error"],
                     })
 

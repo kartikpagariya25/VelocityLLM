@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from .config import MAX_USERS, Settings
 from .loadgen import SCENARIOS
+from .vision_load import IMAGE_MIXES
 from .models import describe, discover
 from .preflight import run_checks
 from .runner import Orchestrator
@@ -35,6 +36,7 @@ class RunRequest(BaseModel):
     mode: Literal["sequential", "side_by_side"] = "sequential"
     prompt_preset: Literal["short", "medium", "long", "custom"] = "medium"
     prompt_text: Optional[str] = Field(default=None, max_length=500)
+    image_mix: Literal["small", "mixed", "large"] = "mixed"
     seed: int = Field(default=42, ge=0, le=1_000_000)
     levels: Optional[list[int]] = Field(default=None, max_length=8)
     mock: Optional[bool] = None
@@ -132,6 +134,10 @@ def create_app(settings: Settings) -> FastAPI:
     @app.get("/api/scenarios")
     async def scenarios():
         return [{"id": k, "label": v["label"], "description": v["description"]} for k, v in SCENARIOS.items()]
+
+    @app.get("/api/image-mixes")
+    async def image_mixes():
+        return [{"id": k, "label": v["label"], "description": v["description"]} for k, v in IMAGE_MIXES.items()]
 
     @app.post("/api/runs", status_code=202)
     async def create_run(req: RunRequest):

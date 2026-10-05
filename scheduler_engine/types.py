@@ -194,6 +194,8 @@ class SchedulerStats:
     gpu_memory_used_mb: int = 0
     gpu_memory_total_mb: int = 0
     avg_queue_wait_seconds: float = 0.0
+    total_image_tokens: int = 0
+    active_image_tokens: int = 0
 
     # Phase 3 Robustness Telemetry
     client_disconnects_count: int = 0
@@ -224,6 +226,8 @@ class SchedulerStats:
             "gpu_memory_used_mb": self.gpu_memory_used_mb,
             "gpu_memory_total_mb": self.gpu_memory_total_mb,
             "avg_queue_wait_seconds": round(self.avg_queue_wait_seconds, 4),
+            "total_image_tokens": self.total_image_tokens,
+            "active_image_tokens": self.active_image_tokens,
             "client_disconnects_count": self.client_disconnects_count,
             "burst_shed_count": self.burst_shed_count,
             "oom_recoveries_count": self.oom_recoveries_count,
@@ -254,6 +258,8 @@ class ServerConfig:
 
     # Phase 3 Robustness additions
     enable_structured_logging: bool = False
+    image_slot_tokens: int = 1024   # image tokens that count as one extra concurrency slot
+    heavy_image_tokens: int = 768   # images this large are shed first under memory pressure
     drop_hopeless_requests: bool = True  # decline queued requests that can no longer meet their SLA
 
     # Phase A - API Key Authentication (optional; None disables auth entirely)
