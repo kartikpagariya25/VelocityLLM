@@ -1,4 +1,4 @@
-const EVENTS = ['phase', 'log', 'metrics', 'request', 'result', 'level_result', 'device_result', 'done', 'error', 'info']
+const EVENTS = ['phase', 'log', 'metrics', 'request', 'result', 'level_result', 'done', 'error', 'info']
 
 const clean = (base) => base.trim().replace(/\/+$/, '')
 
@@ -30,8 +30,33 @@ export async function listModels(base) {
   }
 }
 
-function stream(root, runId, emit) {
-  const es = new EventSource(`${root}/api/runs/${runId}/events`)
+export async function startLiveRun(base, cfg, emit) {
+  const root = clean(base)
+  let res
+  try {
+    res = await fetch(`${root}/api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: cfg.model,
+        scenario: cfg.traffic,
+        sla_ms: Math.round(cfg.sla * 1000),
+        requests: cfg.users,
+        repeats: cfg.repeats || 1,
+        levels: cfg.levels && cfg.levels.length > 1 ? cfg.levels : null,
+        mode: 'sequential',
+        prompt_preset: cfg.prompt,
+        prompt_text: cfg.prompt === 'custom' ? cfg.text : null,
+        image_mix: cfg.imageMix || 'mixed',
+      }),
+    })
+  } catch {
+    throw new Error(`Cannot reach the control service at ${root}. Is it running, and is the address right?`)
+  }
+  if (!res.ok) throw new Error(await readError(res))
+  const { run_id } = await res.json()
+
+  const es = new EventSource(`${root}/api/runs/${run_id}/events`)
   let finished = false
   let failures = 0
   es.onopen = () => {
@@ -61,45 +86,6 @@ function stream(root, runId, emit) {
       emit({ event: n, data })
     }),
   )
-  return () => {
-    finished = true
-    es.close()
-  }
-}
-
-export function attachRun(base, runId, emit) {
-  const root = clean(base)
-  const stop = stream(root, runId, emit)
-  return { runId, stop }
-}
-
-export async function startLiveRun(base, cfg, emit) {
-  const root = clean(base)
-  let res
-  try {
-    res = await fetch(`${root}/api/runs`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: cfg.model,
-        scenario: cfg.traffic,
-        sla_ms: Math.round(cfg.sla * 1000),
-        requests: cfg.users,
-        repeats: cfg.repeats || 1,
-        levels: cfg.levels && cfg.levels.length > 1 ? cfg.levels : null,
-        mode: 'sequential',
-        prompt_preset: cfg.prompt,
-        prompt_text: cfg.prompt === 'custom' ? cfg.text : null,
-        image_mix: cfg.imageMix || 'mixed',
-      }),
-    })
-  } catch {
-    throw new Error(`Cannot reach the control service at ${root}. Is it running, and is the address right?`)
-  }
-  if (!res.ok) throw new Error(await readError(res))
-  const { run_id } = await res.json()
-
-  stream(root, run_id, emit)
 
   return {
     runId: run_id,

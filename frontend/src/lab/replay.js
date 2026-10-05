@@ -26,7 +26,6 @@ export function configOf(rec) {
     vision: !!rec.results?.environment?.vision || (rec.events || []).some((e) => e.event === 'info' && e.data.vision),
     mode: 'sequential',
     speed: 1,
-    policies: c.live ? c.policies : undefined,
   }
 }
 
