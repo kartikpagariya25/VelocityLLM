@@ -11,7 +11,6 @@ import Team from './components/Team'
 import Footer from './components/Footer'
 import Lab from './lab/Lab'
 import Boundary from './lab/Boundary'
-import Phone from './live/Phone'
 
 function Site() {
   useEffect(() => {
@@ -37,24 +36,23 @@ function Site() {
   )
 }
 
-const route = () => {
-  const h = window.location.hash
-  if (h.startsWith('#/join')) return 'join'
-  if (h.startsWith('#/live')) return 'live'
-  if (h.startsWith('#/lab')) return 'lab'
-  return 'site'
-}
+const inLab = () => window.location.hash.startsWith('#/lab')
 
 export default function App() {
-  const [view, setView] = useState(route)
+  const [lab, setLab] = useState(inLab)
   useEffect(() => {
     const on = () => {
-      setView(route())
+      setLab(inLab())
       window.scrollTo(0, 0)
     }
     window.addEventListener('hashchange', on)
     return () => window.removeEventListener('hashchange', on)
   }, [])
-  if (view === 'site') return <Site />
-  return <Boundary>{view === 'join' ? <Phone /> : <Lab key={view} session={view === 'live'} />}</Boundary>
+  return lab ? (
+    <Boundary>
+      <Lab />
+    </Boundary>
+  ) : (
+    <Site />
+  )
 }

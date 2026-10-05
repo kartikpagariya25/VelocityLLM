@@ -85,7 +85,7 @@ export default function Saved({ base, refreshKey, onReplay, busy }) {
           {runs.map((r) => (
             <li key={r.id}>
               <div>
-                <b>{r.config.model}</b> {r.config.live ? `${r.config.requests} requests from ${r.config.live.devices?.length || '?'} phones` : r.config.levels?.length > 1 ? `${r.config.levels.join(', ')} users` : `${r.config.requests} users`}, {r.config.live ? 'live' : r.config.scenario}, SLA {(r.config.sla_ms / 1000).toFixed(1)} s{r.config.mock ? ', mock engine' : ''}
+                <b>{r.config.model}</b> {r.config.levels?.length > 1 ? `${r.config.levels.join(', ')} users` : `${r.config.requests} users`}, {r.config.scenario}, SLA {(r.config.sla_ms / 1000).toFixed(1)} s{r.config.mock ? ', mock engine' : ''}
                 <span>{when(r.created)}</span>
               </div>
               <button className="mini" disabled={busy} onClick={() => play(r.id)}>

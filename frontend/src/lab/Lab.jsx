@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { MODELS, PROMPTS, TRAFFIC, LIMITS, HEAVY_IMAGE, customTokens, registerModels } from './sim'
-import { startSimRun, startSimSweep, stepsFor, stepsForPolicies } from './runner'
-import { startLiveRun, attachRun, probe, listModels } from './live'
+import { startSimRun, startSimSweep, stepsFor } from './runner'
+import { startLiveRun, probe, listModels } from './live'
 import { newStore, apply, ROWS, change, sentence, smartSentence, verdictOf, toCsv, download, logLine, f2, onTime, unequalText, hasGoodput } from './store'
 import { drawTimeline, drawConcurrency, niceMax } from './charts'
 import Info from './Info'
@@ -9,11 +9,8 @@ import Count from './Count'
 import Pressure from './Pressure'
 import Saved from './Saved'
 import Vision from './Vision'
-import SessionPanel from '../live/SessionPanel'
 import { startReplay, configOf } from './replay'
 import './Lab.css'
-
-const has = (store, policy) => !store.cfg.policies || store.cfg.policies.includes(policy)
 
 const PC_DEFAULT = window.location.port === '9000' ? window.location.origin : 'http://localhost:9000'
 const SOURCE_BADGE = { sim: 'Simulated run', pc: 'PC GPU', cloud: 'College GPU', mock: 'Mock engine', replay: 'Recorded run' }
@@ -30,39 +27,6 @@ const loadHistory = () => {
   }
 }
 
-function DeviceTable({ store }) {
-  const dr = store.deviceResults
-  const pols = ['static', 'dynamic', 'smart'].filter((p) => dr && dr[p] && Object.keys(dr[p]).length)
-  if (!pols.length) return null
-  const names = [...new Set(pols.flatMap((p) => Object.keys(dr[p])))]
-  return (
-    <div className="tablewrap devtable">
-      <h4>Per device</h4>
-      <table>
-        <thead>
-          <tr>
-            <th>Device</th>
-            {pols.map((p) => (
-              <th key={p}>{p[0].toUpperCase() + p.slice(1)} on time / p99 / tok/s</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {names.map((n) => (
-            <tr key={n}>
-              <td>{n}</td>
-              {pols.map((p) => {
-                const r = dr[p][n]
-                return <td key={p}>{r ? `${onTime(r)}/${r.offered} · ${f2(r.p99_s)} s · ${(r.tokens_per_s || 0).toFixed(0)}` : '-'}</td>
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
 function Tile({ label, value, tone, info }) {
   return (
     <div className={`tile ${tone || ''}`}>
@@ -75,7 +39,7 @@ function Tile({ label, value, tone, info }) {
   )
 }
 
-export function Panel({ name, policy, store, onPick }) {
+function Panel({ name, policy, store, onPick }) {
   const cv = useRef(null)
   const hit = useRef([])
   const p = store[policy]
@@ -145,7 +109,7 @@ export function Panel({ name, policy, store, onPick }) {
   )
 }
 
-export function Console({ logs, running }) {
+function Console({ logs, running }) {
   const [pol, setPol] = useState('all')
   const [cats, setCats] = useState(new Set(CATS))
   const [q, setQ] = useState('')
@@ -222,7 +186,7 @@ export function Console({ logs, running }) {
   )
 }
 
-export function Results({ store, label, recordingUrl }) {
+function Results({ store, label, recordingUrl }) {
   const s = store.static.result
   const d = store.dynamic.result
   const m = store.smart?.result
@@ -293,9 +257,9 @@ export function Results({ store, label, recordingUrl }) {
               <th>Metric</th>
               <th>Static</th>
               <th>Dynamic</th>
-              {m && <th>Smart</th>}
+              <th>Smart</th>
               <th>Dynamic vs Static</th>
-              {m && <th>Smart vs Static</th>}
+              <th>Smart vs Static</th>
             </tr>
           </thead>
           <tbody>
@@ -318,16 +282,15 @@ export function Results({ store, label, recordingUrl }) {
                   </td>
                   <td>{s ? fmt(s[k]) : '-'}</td>
                   <td>{d ? fmt(d[k]) : '-'}</td>
-                  {m && <td>{fmt(m[k])}</td>}
+                  <td>{m ? fmt(m[k]) : '-'}</td>
                   <td className={dCell.cls}>{dCell.text}</td>
-                  {m && <td className={mCell.cls}>{mCell.text}</td>}
+                  <td className={mCell.cls}>{mCell.text}</td>
                 </tr>
               )
             })}
           </tbody>
         </table>
       </div>
-      <DeviceTable store={store} />
       {[...(s?.warnings || []).map((w) => `Static: ${w}`), ...(d?.warnings || []).map((w) => `Dynamic: ${w}`), ...(m?.warnings || []).map((w) => `Smart: ${w}`)].map((w) => (
         <p key={w} className="warnline">
           {w}
@@ -339,7 +302,7 @@ export function Results({ store, label, recordingUrl }) {
   )
 }
 
-export function Inspector({ req, sla, onClose }) {
+function Inspector({ req, sla, onClose }) {
   if (!req) return null
   const wait = req.start_s != null ? req.start_s - req.arrival_s : null
   const exec = req.start_s != null ? req.end_s - req.start_s : null
@@ -347,7 +310,6 @@ export function Inspector({ req, sla, onClose }) {
   const rows = [
     ['Request', req.request_id],
     ['Engine', req.policy],
-    ...(req.device ? [['Phone', req.device]] : []),
     ['Priority', req.priority],
     ['Outcome', req.status === 'served' ? (total <= sla ? 'Served within SLA' : 'Served beyond SLA') : req.status === 'error' ? `Failed (${String(req.reject_reason).replace('_', ' ')})` : `Rejected (${String(req.reject_reason).replace('_', ' ')})`],
     ['Arrival', `${f2(req.arrival_s)} s`],
@@ -378,14 +340,14 @@ export function Inspector({ req, sla, onClose }) {
   )
 }
 
-export default function Lab({ session = false }) {
+export default function Lab() {
   const [cfg, setCfg] = useState(DEF)
-  const [source, setSource] = useState(session ? 'pc' : 'sim')
+  const [source, setSource] = useState('sim')
   const [urls, setUrls] = useState(() => {
     try {
-      return { pc: session ? window.location.origin : PC_DEFAULT, cloud: localStorage.getItem('vllm-cloud-url') || '' }
+      return { pc: PC_DEFAULT, cloud: localStorage.getItem('vllm-cloud-url') || '' }
     } catch {
-      return { pc: session ? window.location.origin : PC_DEFAULT, cloud: '' }
+      return { pc: PC_DEFAULT, cloud: '' }
     }
   })
   const live = source !== 'sim'
@@ -531,7 +493,7 @@ export default function Lab({ session = false }) {
     setPick(null)
     setViewing(null)
     const full = configOf(rec)
-    const s = newStore(full, full.policies ? stepsForPolicies(full.policies) : stepsFor('sequential'), 'replay')
+    const s = newStore(full, stepsFor('sequential'), 'replay')
     s.users = full.users
     s.repeats = rec.config.repeats || 1
     store.current = s
@@ -549,33 +511,6 @@ export default function Lab({ session = false }) {
     setLevels([30, 60, 100, 150])
   }
 
-  const attach = useCallback((run) => {
-    ctl.current?.stop?.()
-    setPick(null)
-    setViewing(null)
-    const c = run.config
-    const policies = c.policies || ['static', 'dynamic']
-    const full = { id: run.id, users: c.requests, levels: [c.requests], traffic: 'live phone', sla: c.sla_ms / 1000, model: c.model, prompt: 'medium', text: '', imageMix: 'mixed', mode: 'sequential', speed: 1, policies, vision: false }
-    const s = newStore(full, stepsForPolicies(policies), 'pc')
-    s.users = c.requests
-    s.repeats = c.repeats || 1
-    s.runId = run.id
-    store.current = s
-    const base = window.location.origin
-    const emit = (ev) => {
-      apply(s, ev)
-      dirty.current = true
-    }
-    const handle = attachRun(base, run.id, emit)
-    ctl.current = {
-      ...handle,
-      cancel: () => fetch(`${base}/api/runs/${run.id}/cancel`, { method: 'POST' }),
-      canBurst: () => false,
-      burst: () => {},
-    }
-    dirty.current = true
-  }, [])
-
   const cancel = () => ctl.current?.cancel()
   const canBurst = running && ctl.current?.canBurst()
   const doBurst = () => ctl.current.burst(burstN)
@@ -592,7 +527,7 @@ export default function Lab({ session = false }) {
           <span className="sr-only">Velocity</span>
           <span>LLM</span>
         </a>
-        <span className="lab__title">{session ? 'Velocity Live' : 'Velocity Arena'}</span>
+        <span className="lab__title">Velocity Arena</span>
         <span className={`src src--${shownSource}`}>{SOURCE_BADGE[shownSource]}</span>
         <a className="lab__back" href="#/">
           Back to site
@@ -600,8 +535,7 @@ export default function Lab({ session = false }) {
       </header>
 
       <main className="lab__main">
-        {session && <SessionPanel onRun={attach} running={running} />}
-        {!session && <section className="controls">
+        <section className="controls">
           <div className="grid">
             <label>
               <span className="lt">Users (1 request each) <Info id="users" /></span>
@@ -768,7 +702,7 @@ export default function Lab({ session = false }) {
               Simulation: all three engines run on one modelled GPU (concurrency-dependent decode speed, 8-slot static batch, AIMD controller, and the admission, capacity and queue rules from the repo). Numbers are illustrative, not measured. Pick PC GPU or Cloud GPU for real runs.
             </p>
           )}
-        </section>}
+        </section>
 
         {st?.status === 'failed' && st.errorDetail.length > 0 && (
           <pre className="errdetail">{st.errorDetail.join('\n')}</pre>
@@ -792,12 +726,12 @@ export default function Lab({ session = false }) {
 
         {st ? (
           <>
-            <div className={`duo ${has(st, 'smart') ? 'duo--3' : ''}`}>
+            <div className="duo duo--3">
               <Panel name="Static scheduler" policy="static" store={st} onPick={setPick} />
               <Panel name="VelocityLLM Dynamic" policy="dynamic" store={st} onPick={setPick} />
-              {has(st, 'smart') && <Panel name="VelocityLLM Smart" policy="smart" store={st} onPick={setPick} />}
+              <Panel name="VelocityLLM Smart" policy="smart" store={st} onPick={setPick} />
             </div>
-            {live && !session && st.status === 'done' && !st.smart.result && (
+            {live && st.status === 'done' && !st.smart.result && (
               <p className="note">This run has no Smart data: it came from a control service without Smart support. Update the control service to compare Smart on the GPU.</p>
             )}
             <section className="aimd">
@@ -808,13 +742,8 @@ export default function Lab({ session = false }) {
                 <span className="legend">
                   <i className="lg lg--s" />
                   Static limit (fixed {8})<i className="lg lg--d" />
-                  Dynamic limit (AIMD)
-                  {has(st, 'smart') && (
-                    <>
-                      <i className="lg lg--m" />
-                      Smart limit (capacity planner)
-                    </>
-                  )}
+                  Dynamic limit (AIMD)<i className="lg lg--m" />
+                  Smart limit (capacity planner)
                 </span>
               </header>
               <canvas ref={cc} className="aimd__cv" />
@@ -823,13 +752,13 @@ export default function Lab({ session = false }) {
             <Results store={shown} label={viewing ? 'from history' : st.source === 'replay' ? 'recorded run' : ''} recordingUrl={live && st.runId && st.status === 'done' ? `${url.replace(/\/+$/, '')}/api/runs/${st.runId}/recording` : null} />
           </>
         ) : (
-          <p className="idle">{session ? 'Waiting for the first phone. The comparison appears here the moment a run starts.' : 'Choose the traffic, set the SLA and press Run comparison. Static, Dynamic and Smart face identical requests, and every scheduler decision shows up in the log below.'}</p>
+          <p className="idle">Choose the traffic, set the SLA and press Run comparison. Static, Dynamic and Smart face identical requests, and every scheduler decision shows up in the log below.</p>
         )}
 
-        {!session && <Pressure store={st} running={running} disabled={blocked || (live && modelOptions.length === 0)} onRun={launch} onJudgePreset={judgePreset} />}
+        <Pressure store={st} running={running} disabled={blocked || (live && modelOptions.length === 0)} onRun={launch} onJudgePreset={judgePreset} />
         <Saved base={live ? url : urls.pc} refreshKey={st?.status} onReplay={replay} busy={running} />
 
-        {!session && history.length > 0 && (
+        {history.length > 0 && (
           <section className="history">
             <header>
               <h3>Recent runs</h3>
