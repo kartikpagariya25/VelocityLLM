@@ -258,7 +258,6 @@ class ServerConfig:
 
     # Phase 3 Robustness additions
     enable_structured_logging: bool = False
-    image_slot_tokens: int = 1024   # image tokens that count as one extra concurrency slot
     heavy_image_tokens: int = 768   # images this large are shed first under memory pressure
     drop_hopeless_requests: bool = True  # decline queued requests that can no longer meet their SLA
 

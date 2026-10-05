@@ -147,10 +147,10 @@ def test_oom_emergency_recovery_and_throttle():
         backend.inject_oom(True)
 
         req = InferenceRequest(prompt="Trigger OOM", max_tokens=10)
-        with pytest.raises(GPUOutOfMemoryError):
-            await policy.schedule(req)
+        recovered = await policy.schedule(req)
+        assert recovered.tokens_generated > 0
 
-        # Verify OOM recovery actions:
+        # Verify OOM recovery actions (the request itself is retried and served):
         # 1. Concurrency limit collapsed to min_concurrency
         assert policy.adaptive_controller.current_concurrency == config.min_concurrency
         # 2. OOM recovery counter incremented

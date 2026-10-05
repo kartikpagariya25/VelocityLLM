@@ -69,16 +69,15 @@ def test_admission_high_priority_tolerance():
     controller = AdmissionController(config)
 
     # Configure controller service time to a known baseline
-    controller._ema_service_time = 0.5
+    controller._ema_service_time = 0.65
     controller._ema_token_time = 0.001
 
     # A normal request might exceed tolerance, while high priority gets 1.35x headroom
     normal_req = InferenceRequest(prompt="Normal", max_tokens=100, priority=RequestPriority.NORMAL, sla_target_ms=600.0)
     high_req = InferenceRequest(prompt="High", max_tokens=100, priority=RequestPriority.HIGH, sla_target_ms=600.0)
 
-    # With queue size 1, wait is 0.5s / 1 = 0.5s. Exec time is ~0.15s. Total ~0.65s.
-    # Normal target 0.6s * 1.05 = 0.63s -> rejected
-    # High target 0.6s * 1.35 = 0.81s -> accepted
+    # Queue 1 waits 0.65s; even at half the usual exec time the total is ~0.73s.
+    # Normal limit 0.63s -> rejected, high limit 0.81s -> accepted
     res_normal = controller.evaluate(normal_req, current_queue_size=1, active_concurrency=1)
     res_high = controller.evaluate(high_req, current_queue_size=1, active_concurrency=1)
 
@@ -177,3 +176,29 @@ def test_reachable_concurrency_is_credited_in_the_wait_estimate():
 
 def test_wait_estimate_still_rejects_a_hopeless_queue():
     assert _flood_decision(250, 32).admitted is False
+
+
+def test_estimator_ignores_non_finite_samples():
+    controller = AdmissionController(ServerConfig())
+    before = (controller._ema_service_time, controller._ema_token_time)
+    controller.update_completion_stats(float("nan"), 10)
+    controller.update_completion_stats(float("inf"), 10)
+    assert (controller._ema_service_time, controller._ema_token_time) == before
+
+
+def test_no_false_rejection_when_ceiling_has_capacity():
+    config = ServerConfig(max_queue_size=200, target_sla_ms=8000.0, max_concurrency=32)
+    controller = AdmissionController(config)
+    controller._ema_service_time = 2.0
+    req = InferenceRequest(prompt="x", max_tokens=128)
+    result = controller.evaluate(req, current_queue_size=40, active_concurrency=8, in_flight=8, concurrency_ceiling=32)
+    assert result.admitted is True
+
+
+def test_slot_weight_grows_with_learned_prefill():
+    controller = AdmissionController(ServerConfig())
+    assert controller.slot_weight(0) == 1.0
+    light = controller.slot_weight(1024)
+    controller._ema_prefill_time = 0.002
+    assert controller.slot_weight(1024) > light
+    assert controller.slot_weight(10**9) <= 1.0 + controller._max_extra_slots

@@ -37,6 +37,7 @@ class AdmissionController:
         self._ema_service_time = 1.2   # ~1.2s average request service time
         self._ema_prefill_time = 0.0002  # seconds of prefill per image token (~5,000 tokens/s)
         self._max_prefill_time = 0.002
+        self._max_extra_slots = 3.0
         self._alpha = 0.1             # Smoothing factor for EMA updates
         self._max_sample_growth = 2.0  # A single sample may at most double the estimate
         self._baseline_token_time = self._ema_token_time
@@ -54,8 +55,10 @@ class AdmissionController:
 
     def update_completion_stats(self, latency_seconds: float, tokens_generated: int, image_tokens: int = 0) -> None:
         """Update service time estimation metrics from completed requests."""
-        if latency_seconds <= 0:
+        if not math.isfinite(latency_seconds) or latency_seconds <= 0:
             return
+        tokens_generated = max(0, int(tokens_generated))
+        image_tokens = max(0, int(image_tokens))
         self._last_completion = time.monotonic()
 
         if image_tokens > 0:
@@ -85,7 +88,7 @@ class AdmissionController:
         logger.warning("No completions for %.0fs; service-time estimates decayed toward baseline.", self._stale_after_seconds)
 
     @staticmethod
-    def projected_slots(active_concurrency: int, concurrency_ceiling: Optional[int] = None) -> float:
+    def projected_slots(active_concurrency: int, concurrency_ceiling: Optional[int] = None, optimistic: bool = False) -> float:
         """
         Effective number of parallel slots to plan with. The adaptive controller can raise the limit
         within about a second, but throughput grows roughly with the square root of the batch size
@@ -94,7 +97,7 @@ class AdmissionController:
         """
         base = max(1, active_concurrency)
         if concurrency_ceiling and concurrency_ceiling > base:
-            return base * math.sqrt(concurrency_ceiling / base)
+            return float(concurrency_ceiling) if optimistic else base * math.sqrt(concurrency_ceiling / base)
         return float(base)
 
     def estimate_wait_time(
@@ -103,14 +106,23 @@ class AdmissionController:
         active_concurrency: int,
         concurrency_ceiling: Optional[int] = None,
         queued_image_tokens: int = 0,
+        optimistic: bool = False,
     ) -> float:
         """
         Estimate queueing wait time in seconds before an arriving request begins execution.
         E[wait] = (queue_length * avg_service_time + queued image prefill) / projected parallel slots
+        The optimistic form assumes the concurrency ceiling is reached and adds throughput linearly.
         """
-        slots = self.projected_slots(active_concurrency, concurrency_ceiling)
+        slots = self.projected_slots(active_concurrency, concurrency_ceiling, optimistic)
         work = current_queue_size * self._ema_service_time + queued_image_tokens * self._ema_prefill_time
         return work / slots
+
+    def slot_weight(self, image_tokens: int) -> float:
+        """Concurrency slots a request occupies: one, plus its measured image prefill relative to a typical request."""
+        if image_tokens <= 0:
+            return 1.0
+        extra = image_tokens * self._ema_prefill_time / max(self._ema_service_time, 0.05)
+        return 1.0 + min(extra, self._max_extra_slots)
 
     def estimate_execution_time(self, max_tokens: int, image_tokens: int = 0) -> float:
         """
@@ -198,7 +210,10 @@ class AdmissionController:
 
         running = active_concurrency if in_flight is None else in_flight
         server_idle = current_queue_size == 0 and running == 0
-        if not server_idle and est_total_latency > (target_sla_sec * tolerance_multiplier):
+        best_case_wait = self.estimate_wait_time(
+            current_queue_size, active_concurrency, concurrency_ceiling, queued_image_tokens, optimistic=True
+        )
+        if not server_idle and self.is_hopeless(request, best_case_wait):
             self.total_rejected_sla += 1
             retry_after = round(est_wait, 2)
             logger.info(

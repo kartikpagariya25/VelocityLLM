@@ -251,11 +251,13 @@ class MockBackend(InferenceBackend):
         tokens_per_second: float = 80.0,
         simulated_ttft_seconds: float = 0.02,
         prefill_seconds_per_image_token: float = 0.0004,
+        contention_exponent: float = 0.0,
     ):
         self.config = config or ServerConfig(use_mock_backend=True)
         self.tokens_per_second = tokens_per_second
         self.simulated_ttft_seconds = simulated_ttft_seconds
         self.prefill_seconds_per_image_token = prefill_seconds_per_image_token
+        self.contention_exponent = contention_exponent
         self.active_inferences = 0
         self.total_generated_tokens = 0
         self.initialized = False
@@ -311,7 +313,6 @@ class MockBackend(InferenceBackend):
 
             # Determine response token length (either max_tokens or natural completion)
             target_tokens = min(max_tokens, random.randint(max(1, max_tokens // 2), max_tokens))
-            delay_per_token = 1.0 / max(1.0, self.tokens_per_second)
 
             sample_vocabulary = [
                 "The", " quick", " dynamic", " scheduler", " efficiently",
@@ -329,7 +330,8 @@ class MockBackend(InferenceBackend):
                 word = sample_vocabulary[i % len(sample_vocabulary)]
                 yield word
                 self.total_generated_tokens += 1
-                await asyncio.sleep(delay_per_token)
+                shared_rate = self.tokens_per_second / (max(1, self.active_inferences) ** self.contention_exponent)
+                await asyncio.sleep(1.0 / max(1.0, shared_rate))
         finally:
             self.active_inferences = max(0, self.active_inferences - 1)
 

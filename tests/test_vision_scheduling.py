@@ -60,11 +60,14 @@ def test_heavy_images_are_shed_first_under_memory_pressure():
     assert light.admitted is True
 
 
-async def _peak_active(sides, limit):
+async def _peak_active(sides, limit, learned_prefill=None):
     config = ServerConfig(initial_concurrency=limit, min_concurrency=limit, max_concurrency=limit, target_sla_ms=60000.0, vision=True)
     backend = MockBackend(tokens_per_second=400.0, simulated_ttft_seconds=0.01, prefill_seconds_per_image_token=0.0002)
     policy = DynamicBatchPolicy(backend=backend, config=config)
     await policy.initialize()
+    if learned_prefill:
+        policy.admission_controller._ema_prefill_time = learned_prefill
+        policy.admission_controller._ema_service_time = 1.0
     peak = 0
 
     async def watch():
@@ -85,7 +88,7 @@ async def _peak_active(sides, limit):
 
 async def test_large_images_occupy_more_slots():
     light_peak, _ = await _peak_active([None] * 8, 4)
-    heavy_peak, stats = await _peak_active([896] * 8, 4)
+    heavy_peak, stats = await _peak_active([896] * 8, 4, learned_prefill=0.002)
     assert light_peak == 4
     assert heavy_peak <= 2
     assert stats.total_image_tokens == 8 * 1024
@@ -96,3 +99,33 @@ async def test_mixed_load_completes_and_reports_image_tokens():
     assert stats.total_completed == 6
     assert stats.total_image_tokens == 64 * 2 + 256 + 1024
     assert stats.to_dict()["total_image_tokens"] == stats.total_image_tokens
+
+
+async def test_telemetry_failure_does_not_stall_dispatch():
+    config = ServerConfig(initial_concurrency=2, min_concurrency=2, max_concurrency=2, target_sla_ms=60000.0)
+    backend = MockBackend(tokens_per_second=400.0, simulated_ttft_seconds=0.01)
+
+    def broken():
+        raise RuntimeError("nvidia-smi timeout")
+
+    backend.get_gpu_telemetry = broken
+    policy = DynamicBatchPolicy(backend=backend, config=config)
+    await policy.initialize()
+    try:
+        results = await asyncio.gather(*(policy.schedule(request(None, max_tokens=8)) for _ in range(4)))
+    finally:
+        await policy.shutdown()
+    assert all(r.tokens_generated > 0 for r in results)
+
+
+async def test_controller_ramps_with_weighted_image_load():
+    config = ServerConfig(initial_concurrency=4, min_concurrency=4, max_concurrency=16, target_sla_ms=60000.0, vision=True)
+    backend = MockBackend(tokens_per_second=400.0, simulated_ttft_seconds=0.01, prefill_seconds_per_image_token=0.0002)
+    policy = DynamicBatchPolicy(backend=backend, config=config)
+    await policy.initialize()
+    try:
+        await asyncio.gather(*(policy.schedule(request(448, max_tokens=24)) for _ in range(40)))
+        stats = policy.get_stats()
+    finally:
+        await policy.shutdown()
+    assert stats.total_completed == 40
