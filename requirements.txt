@@ -6,6 +6,9 @@ fastapi
 uvicorn[standard]
 pydantic
 
+# Image decoding for vision-language models
+pillow
+
 # Load generator / async HTTP client
 aiohttp
 

@@ -119,3 +119,31 @@ def test_memory_declines_are_counted_and_explained():
     result = score(rows, 5.0, 2.0)
     assert result["memory_rejected"] == 4
     assert any("GPU memory" in note for note in diagnose(result))
+
+
+def test_model_listing_flags_vision(tmp_path):
+    import json
+
+    from control_service.models import describe, discover
+
+    (tmp_path / "text").mkdir()
+    (tmp_path / "text" / "config.json").write_text(json.dumps({"max_position_embeddings": 4096}))
+    (tmp_path / "vl").mkdir()
+    (tmp_path / "vl" / "config.json").write_text(json.dumps({"vision_config": {}, "max_position_embeddings": 32768}))
+    settings = Settings(models_dir=tmp_path)
+    found = discover(settings)
+    assert describe("vl", found["vl"], False)["vision"] is True
+    assert describe("text", found["text"], False)["vision"] is False
+    assert describe("mock-vision", "mock-vision", True)["vision"] is True
+
+
+def test_engine_command_adds_vision_flag():
+    from control_service.engine import Engine
+
+    async def noop(line):
+        return None
+
+    plain = Engine(Settings(), "dynamic", "mock", 8000, 8100, True, noop)
+    vision = Engine(Settings(), "dynamic", "mock-vision", 8000, 8100, True, noop, vision=True)
+    assert "--vision" not in plain.command()
+    assert "--vision" in vision.command()

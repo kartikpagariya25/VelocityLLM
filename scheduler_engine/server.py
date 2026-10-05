@@ -179,7 +179,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     if _policy and hasattr(_policy, "validation_errors_count"):
         _policy.validation_errors_count += 1
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=422,
         content={
             "error": "Input Validation Error",
             "correlation_id": corr_id,
@@ -189,12 +189,21 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 
+def require_vision_support(req: InferenceRequest) -> None:
+    if req.image and not get_config().vision:
+        raise HTTPException(
+            status_code=422,
+            detail="This server is running a text-only model. Start it with --vision and a vision-language model to send images.",
+        )
+
+
 @app.post("/generate", response_model=InferenceResponse)
 async def generate(req: InferenceRequest, request: Request):
     """
     VelocityLLM Native Generation Endpoint.
     Monitors client disconnect and automatically reclaims execution slots.
     """
+    require_vision_support(req)
     policy = get_policy()
     corr_id = getattr(request.state, "correlation_id", req.request_id or f"req-{uuid.uuid4().hex[:12]}")
     req.request_id = corr_id
@@ -453,6 +462,7 @@ async def health():
         "policy": _config.policy,
         "backend": "mock" if _config.use_mock_backend else "vllm",
         "model": _config.model_path,
+        "vision": _config.vision,
         "uptime_seconds": round(time.time() - _start_time, 2),
     }
 
@@ -525,6 +535,11 @@ def main():
         help="Starting concurrency; the fixed limit for the static policy (default: 8)",
     )
     parser.add_argument(
+        "--vision",
+        action="store_true",
+        help="Serve a vision-language model and accept images on /generate",
+    )
+    parser.add_argument(
         "--max-model-len",
         type=int,
         default=4096,
@@ -556,6 +571,7 @@ def main():
         policy=args.policy,
         model_path=args.model_path,
         use_mock_backend=args.mock,
+        vision=args.vision,
         host=args.host,
         port=args.port,
         target_sla_ms=args.sla_ms,
