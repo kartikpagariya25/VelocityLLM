@@ -153,3 +153,20 @@ async def test_smart_policy_forwards_images_and_counts_their_tokens():
         await policy.shutdown()
     assert heavy.prompt_tokens - plain.prompt_tokens == 1024
     assert any(item for item in seen)
+
+
+async def test_cold_start_completions_do_not_poison_estimates():
+    config = ServerConfig(initial_concurrency=4, min_concurrency=2, max_concurrency=8, target_sla_ms=60000.0)
+    backend = MockBackend(tokens_per_second=400.0, simulated_ttft_seconds=0.01)
+    policy = DynamicBatchPolicy(backend=backend, config=config)
+    await policy.initialize()
+    try:
+        before = policy.admission_controller._ema_service_time
+        policy.total_completed = 0
+        await asyncio.gather(*(policy.schedule(request(None, max_tokens=8)) for _ in range(policy._burn_in_completions)))
+        assert policy.exec_times == []
+        assert policy.admission_controller._ema_service_time == before
+        await policy.schedule(request(None, max_tokens=8))
+        assert len(policy.exec_times) == 1
+    finally:
+        await policy.shutdown()
