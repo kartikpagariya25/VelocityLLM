@@ -1,4 +1,4 @@
-import { Sim, buildArrivals, promptTokens, MODELS } from './sim'
+import { Sim, buildArrivals, promptTokens, imageTokens, MODELS } from './sim'
 
 const POLICIES = ['static', 'dynamic']
 
@@ -143,7 +143,7 @@ export function startSimRun(cfg, emit) {
     canBurst: () => sims.length > 0 && (cfg.mode === 'parallel' || sims[0].policy === 'static') && sims.some((s) => !s.done),
     burst: (n) => {
       const t = sims[0].t
-      const list = Array.from({ length: n }, (_, i) => ({ id: `r-${nextId + i}`, t: t + i * 0.005, tokens: burstTokens, priority: 'NORMAL' }))
+      const list = Array.from({ length: n }, (_, i) => ({ id: `r-${nextId + i}`, t: t + i * 0.005, tokens: burstTokens, priority: 'NORMAL', img: cfg.vision ? imageTokens(224) : 0 }))
       nextId += n
       list.forEach((a) => master.push(a))
       sims.forEach((s) => s.inject(list))

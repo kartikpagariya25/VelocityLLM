@@ -79,6 +79,7 @@ export const ROWS = [
   ['p99_s', 'p99 latency', (v) => `${f2(v)} s`, 'low'],
   ['tokens_per_s', 'Tokens / s', (v) => v.toFixed(0), 'high'],
   ['goodput_tokens_per_s', 'On-time tokens / s', (v) => v.toFixed(0), 'high'],
+  ['image_tokens_per_s', 'Image tokens / s', (v) => v.toFixed(0), 'high'],
   ['within_sla_served', 'Within SLA (of served)', pctStr, 'high'],
   ['within_sla_offered', 'Answered on time (of all users)', pctStr, 'high'],
   ['served', 'Served', (v) => v, null],

@@ -2,7 +2,19 @@ export const MODELS = [
   { id: 'llama', name: 'Llama-3.2-1B', tpt: 0.012 },
   { id: 'stablelm', name: 'StableLM-2-1.6B', tpt: 0.016 },
   { id: 'qwen', name: 'Qwen2.5-1.5B', tpt: 0.015 },
+  { id: 'qwen2vl', name: 'Qwen2-VL-2B (vision)', tpt: 0.018, vision: true },
 ]
+
+export const IMAGE_MIXES = {
+  small: { label: 'Small', hint: 'Thumbnails, about 64 vision tokens each', sizes: [[224, 1]] },
+  mixed: { label: 'Mixed', hint: 'Mostly small images with some large ones', sizes: [[224, 0.5], [448, 0.35], [896, 0.15]] },
+  large: { label: 'Large', hint: 'Full-size images, about 1024 vision tokens each', sizes: [[896, 1]] },
+}
+
+export const imageTokens = (side) => Math.round(side / 28) ** 2
+export const HEAVY_IMAGE = 768
+const IMG_SECONDS = 0.0008
+const IMG_SLOT = 1024
 
 export const PROMPTS = {
   short: { label: 'Short answer', tokens: 64 },
@@ -43,11 +55,21 @@ export function promptTokens(prompt, text) {
   return prompt === 'custom' ? customTokens(text || '') : PROMPTS[prompt].tokens
 }
 
-export function buildArrivals({ users, traffic, prompt, text, seed = 7 }) {
+const pickSide = (rnd, mix) => {
+  let x = rnd()
+  for (const [side, w] of IMAGE_MIXES[mix].sizes) {
+    if (x < w) return side
+    x -= w
+  }
+  return IMAGE_MIXES[mix].sizes.at(-1)[0]
+}
+
+export function buildArrivals({ users, traffic, prompt, text, seed = 7, vision = false, imageMix = 'mixed' }) {
   const rnd = mulberry(seed)
+  const imgRnd = mulberry(seed + 101)
   const base = promptTokens(prompt, text)
   const out = []
-  const push = (t, tokens, priority = 'NORMAL') => out.push({ t, tokens, priority })
+  const push = (t, tokens, priority = 'NORMAL') => out.push({ t, tokens, priority, img: vision ? imageTokens(pickSide(imgRnd, imageMix)) : 0 })
   for (let i = 0; i < users; i++) {
     if (traffic === 'flood') push(i * 0.01, base)
     else if (traffic === 'steady') push((i / users) * 30 + rnd() * 0.4, base)
@@ -77,7 +99,10 @@ export function score(requests, sla) {
   const span = served.length ? Math.max(...served.map((r) => r.end_s)) - Math.min(...requests.map((r) => r.arrival_s)) : 0
   const tokens = served.reduce((n, r) => n + r.tokens, 0)
   const onTimeTokens = served.filter((r) => r.end_s - r.arrival_s <= sla).reduce((n, r) => n + r.tokens, 0)
+  const imageTokensServed = served.reduce((n, r) => n + (r.image_tokens || 0), 0)
   return {
+    image_tokens: imageTokensServed,
+    image_tokens_per_s: span > 0 ? imageTokensServed / span : 0,
     p50_s: pct(lat, 50),
     p95_s: pct(lat, 95),
     p99_s: pct(lat, 99),
@@ -95,6 +120,7 @@ export function score(requests, sla) {
 export class Sim {
   constructor({ policy, arrivals, sla, tpt, emit }) {
     this.policy = policy
+    this.prefill = IMG_SECONDS / tpt
     this.sla = sla
     this.tptBase = tpt
     this.emit = emit
@@ -146,19 +172,27 @@ export class Sim {
     this.done = false
   }
 
-  predict(tokens) {
+  weight(r) {
+    return 1 + (r.img || 0) / IMG_SLOT
+  }
+
+  get load() {
+    return this.active.reduce((n, r) => n + this.weight(r), 0)
+  }
+
+  predict(tokens, img = 0) {
     const perTok = this.perTok ?? this.tpt(this.limit)
     const exec = this.execAvg ?? 128 * perTok
-    const ahead = this.queue.length + this.active.length
+    const ahead = this.queue.reduce((n, r) => n + this.weight(r), 0) + this.load
     const waves = Math.floor(ahead / this.limit)
-    return { pred: waves * exec + tokens * perTok, perTok }
+    return { pred: waves * exec + (tokens + img * this.prefill) * perTok, perTok }
   }
 
   arrive(a) {
-    const r = { ...a, arrival_s: a.t, start_s: null, end_s: null, left: a.tokens, status: 'pending' }
+    const r = { ...a, arrival_s: a.t, start_s: null, end_s: null, left: a.tokens + (a.img || 0) * this.prefill, status: 'pending' }
     if (this.policy === 'dynamic') {
       if (this.queue.length >= QUEUE_LIMIT) return this.reject(r, 'queue_full', `Request ${r.id} rejected: Queue full (${this.queue.length}/${QUEUE_LIMIT}). Retry after 1.00s`, 1)
-      const { pred } = this.predict(r.tokens)
+      const { pred } = this.predict(r.tokens, r.img)
       if (pred > this.sla)
         return this.reject(r, 'sla_impossible', `Request ${r.id} rejected: Predicted latency ${pred.toFixed(2)}s exceeds SLA target ${this.sla.toFixed(2)}s.`, Math.max(0.5, pred - this.sla))
       this.line('admission', 'INFO', `Request ${r.id} admitted (predicted ${pred.toFixed(2)}s <= SLA ${this.sla.toFixed(2)}s, queue ${this.queue.length}, active ${this.active.length}/${this.limit})`, r.id)
@@ -182,12 +216,13 @@ export class Sim {
         status: 'rejected',
         http_status: 429,
         tokens: r.tokens,
+        image_tokens: r.img || 0,
         priority: r.priority,
         reject_reason: reason,
         retry_after_s: retry,
       },
     })
-    this.reqs.push({ request_id: r.id, arrival_s: r.arrival_s, end_s: this.t, status: 'rejected', tokens: r.tokens })
+    this.reqs.push({ request_id: r.id, arrival_s: r.arrival_s, end_s: this.t, status: 'rejected', tokens: r.tokens, image_tokens: r.img || 0 })
   }
 
   control() {
@@ -237,7 +272,8 @@ export class Sim {
   step() {
     this.t += DT
     while (this.pending.length && this.pending[0].t <= this.t) this.arrive(this.pending.shift())
-    while (this.active.length < this.limit && this.queue.length) {
+    const room = () => (this.policy === 'dynamic' ? this.load < this.limit : this.active.length < this.limit)
+    while (room() && this.queue.length) {
       const r = this.queue.shift()
       r.start_s = this.t
       this.active.push(r)
@@ -253,7 +289,8 @@ export class Sim {
         r.end_s = this.t
         const exec = r.end_s - r.start_s
         this.execAvg = this.execAvg == null ? exec : this.execAvg * 0.7 + exec * 0.3
-        this.perTok = this.perTok == null ? exec / r.tokens : this.perTok * 0.7 + (exec / r.tokens) * 0.3
+        const pure = r.tokens / (r.tokens + (r.img || 0) * this.prefill)
+        this.perTok = this.perTok == null ? (exec * pure) / r.tokens : this.perTok * 0.7 + ((exec * pure) / r.tokens) * 0.3
         this.completed++
         this.tokens += r.tokens
         this.lat.push(r.end_s - r.arrival_s)
@@ -269,12 +306,13 @@ export class Sim {
             status: 'served',
             http_status: 200,
             tokens: r.tokens,
+            image_tokens: r.img || 0,
             priority: r.priority,
             reject_reason: null,
             retry_after_s: null,
           },
         })
-        this.reqs.push({ request_id: r.id, arrival_s: r.arrival_s, end_s: r.end_s, status: 'served', tokens: r.tokens })
+        this.reqs.push({ request_id: r.id, arrival_s: r.arrival_s, end_s: r.end_s, status: 'served', tokens: r.tokens, image_tokens: r.img || 0 })
       }
     }
     this.control()

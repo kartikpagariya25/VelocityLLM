@@ -22,6 +22,8 @@ export function configOf(rec) {
     model: c.model,
     prompt: c.prompt_preset,
     text: c.prompt_text || '',
+    imageMix: c.image_mix || 'mixed',
+    vision: !!rec.results?.environment?.vision || (rec.events || []).some((e) => e.event === 'info' && e.data.vision),
     mode: 'sequential',
     speed: 1,
   }
