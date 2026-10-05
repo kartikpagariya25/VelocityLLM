@@ -35,7 +35,8 @@ export default function SessionPanel({ onRun, running }) {
 
   const fallback = window.location.hostname && !['localhost', '127.0.0.1'].includes(window.location.hostname) ? window.location.hostname : state?.hosts?.[0] || ''
   const address = host || fallback
-  const joinUrl = address ? `http://${address}:${state?.port || window.location.port || 9000}/#/join` : 'Enter the PC address'
+  const full = /^https?:\/\//i.test(address)
+  const joinUrl = address ? (full ? `${address.replace(/\/+$/, '')}/#/join` : `http://${address}:${state?.port || window.location.port || 9000}/#/join`) : 'Enter the PC address'
   const cfg = state?.config
 
   const update = async (patch) => {
@@ -74,7 +75,7 @@ export default function SessionPanel({ onRun, running }) {
         </div>
         <label className="sess__cfg">
           PC address
-          <input className="sess__addr" value={host} placeholder={fallback || '192.168.x.x'} onChange={(e) => setHost(e.target.value.trim())} />
+          <input className="sess__addr" value={host} placeholder={fallback || '192.168.x.x or https://tunnel-link'} onChange={(e) => setHost(e.target.value.trim())} />
         </label>
       </div>
 

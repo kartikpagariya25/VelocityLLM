@@ -57,3 +57,15 @@ Test from the phone browser: `http://<PC-IP>:9000/api/preflight` should return J
 ## Termux (optional)
 
 Termux is not needed: the phone browser is enough. If you want traffic to originate from the phone itself, it would need a stable gateway port on the PC and is not part of this version.
+
+## No hotspot: public tunnel
+
+If phones cannot reach the PC on the local network, expose the engine through a Cloudflare quick tunnel (no account). Phones can then use mobile data.
+
+```
+curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o ~/cloudflared
+chmod +x ~/cloudflared
+~/cloudflared tunnel --url http://localhost:9000
+```
+
+It prints `https://<random>.trycloudflare.com`. Phones open `<that link>/#/join`; paste the same link into the dashboard's PC address box to show the join URL. Keep the dashboard on `http://localhost:9000/#/live`. The link is public while the tunnel runs, so stop it (Ctrl+C) after the demo.
