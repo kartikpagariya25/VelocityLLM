@@ -20,6 +20,16 @@ export async function probe(base) {
   }
 }
 
+export async function listModels(base) {
+  try {
+    const r = await fetch(`${clean(base)}/api/models`, { signal: AbortSignal.timeout(2500) })
+    if (!r.ok) return []
+    return (await r.json()).filter((m) => m.available && m.id !== 'mock-model')
+  } catch {
+    return []
+  }
+}
+
 export async function startLiveRun(base, cfg, emit) {
   const root = clean(base)
   let res

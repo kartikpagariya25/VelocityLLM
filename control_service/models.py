@@ -20,6 +20,15 @@ def resolve(path: str) -> Path:
     return p if p.is_absolute() else ROOT / p
 
 
+def weights_mb(folder: Path):
+    files = list(folder.glob("*.safetensors")) or list(folder.glob("*.bin"))
+    try:
+        total = sum(f.stat().st_size for f in files)
+    except OSError:
+        return None
+    return int(total / (1024 * 1024)) or None
+
+
 def describe(name: str, path: str, mock: bool) -> dict:
     available = mock or resolve(path).is_dir()
     return {
@@ -29,5 +38,6 @@ def describe(name: str, path: str, mock: bool) -> dict:
         "available": available,
         "vision": name == "mock-vision" if mock else is_vision(path),
         "max_position_embeddings": native_context(path),
+        "size_mb": None if mock or not available else weights_mb(resolve(path)),
         "note": None if available else "Model folder not found on this machine",
     }

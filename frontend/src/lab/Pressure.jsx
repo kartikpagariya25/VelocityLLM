@@ -33,7 +33,7 @@ export default function Pressure({ store, running, disabled, onRun, onJudgePrese
   const [err, setErr] = useState('')
   const levels = store?.cfg.levels?.length > 1 ? store.cfg.levels : null
   const data = store?.levels
-  const have = levels && levels.some((n) => data.static[n] || data.dynamic[n])
+  const have = levels && levels.some((n) => data.static[n] || data.dynamic[n] || data.smart?.[n])
 
   const go = () => {
     try {
@@ -50,7 +50,7 @@ export default function Pressure({ store, running, disabled, onRun, onJudgePrese
         <h3>
           Pressure test <Info id="pressure" />
         </h3>
-        <span className="sub">Same traffic at growing load, both schedulers. See where Static breaks its promise.</span>
+        <span className="sub">Same traffic at growing load, every scheduler. See where Static breaks its promise.</span>
       </header>
       <div className="pressure__row">
         <label>
@@ -93,6 +93,8 @@ export default function Pressure({ store, running, disabled, onRun, onJudgePrese
             Static
             <i className="lg lg--d" />
             Dynamic
+            <i className="lg lg--m" />
+            Smart
           </p>
           <div className="tablewrap">
             <table>
@@ -101,16 +103,19 @@ export default function Pressure({ store, running, disabled, onRun, onJudgePrese
                   <th>Users</th>
                   <th>Static p99</th>
                   <th>Dynamic p99</th>
-                  <th>Change</th>
+                  <th>Smart p99</th>
+                  <th>Dynamic vs Static</th>
                   <th>Static on time</th>
                   <th>Dynamic on time</th>
-                  <th>Dynamic declined</th>
+                  <th>Smart on time</th>
+                  <th>Declined (Dyn / Smart)</th>
                 </tr>
               </thead>
               <tbody>
                 {levels.map((n) => {
                   const s = data.static[n]
                   const d = data.dynamic[n]
+                  const m = data.smart?.[n]
                   const v = s && d ? change(s.p99_s, d.p99_s) : null
                   const tone = v == null ? '' : { better: 'good', worse: 'bad', same: '' }[verdictOf(v, true)]
                   return (
@@ -118,10 +123,12 @@ export default function Pressure({ store, running, disabled, onRun, onJudgePrese
                       <td>{n}</td>
                       <td>{s ? `${f2(s.p99_s)} s` : '...'}</td>
                       <td>{d ? `${f2(d.p99_s)} s` : '...'}</td>
+                      <td>{m ? `${f2(m.p99_s)} s` : '...'}</td>
                       <td className={tone}>{v == null ? '' : `${v > 0 ? '+' : ''}${v.toFixed(0)}%`}</td>
                       <td>{s ? pctStr(s.within_sla_offered) : '...'}</td>
                       <td>{d ? pctStr(d.within_sla_offered) : '...'}</td>
-                      <td>{d ? `${d.rejected} of ${d.offered}` : '...'}</td>
+                      <td>{m ? pctStr(m.within_sla_offered) : '...'}</td>
+                      <td>{d ? `${d.rejected} / ${m ? m.rejected : '-'} of ${d.offered}` : '...'}</td>
                     </tr>
                   )
                 })}

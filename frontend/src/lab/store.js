@@ -18,7 +18,8 @@ export function newStore(cfg, steps, source) {
     errorDetail: [],
     static: emptyPolicy(),
     dynamic: emptyPolicy(),
-    levels: { static: {}, dynamic: {} },
+    smart: emptyPolicy(),
+    levels: { static: {}, dynamic: {}, smart: {} },
     runId: null,
   }
 }
@@ -144,8 +145,8 @@ export function sweepSentence(cfg, levels, data) {
 }
 
 export function toCsv(s) {
-  const head = 'metric,static,dynamic'
-  const lines = ROWS.map(([k, label]) => `${label},${s.static.result?.[k] ?? ''},${s.dynamic.result?.[k] ?? ''}`)
+  const head = 'metric,static,dynamic,smart'
+  const lines = ROWS.map(([k, label]) => `${label},${s.static.result?.[k] ?? ''},${s.dynamic.result?.[k] ?? ''},${s.smart.result?.[k] ?? ''}`)
   return [head, ...lines].join('\n')
 }
 
@@ -155,6 +156,15 @@ export function download(name, text, type = 'text/plain') {
   a.download = name
   a.click()
   setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+}
+
+export function smartSentence(cfg, s, m) {
+  if (!s || !m || !m.served) return ''
+  const onS = onTime(s)
+  const onM = onTime(m)
+  const p99 = change(s.p99_s, m.p99_s)
+  const shed = m.rejected ? ` It declined ${m.rejected} of ${m.offered} requests it predicted it could not finish in time.` : ' It declined no requests.'
+  return `Smart answered ${onM} users on time against ${onS} for Static, with slowest replies at ${f2(m.p99_s)} s (${phrase(p99, 'higher', 'lower')}).${shed}`
 }
 
 export const logLine = (l) =>

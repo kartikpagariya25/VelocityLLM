@@ -33,7 +33,7 @@ def classify(raw: str):
     return level, category, rid, message
 
 
-NOISE = re.compile(r'"GET /(stats|health)\b')
+NOISE = re.compile(r'"GET /(stats|health|smart/trace)\b')
 
 
 def is_noise(raw: str) -> bool:

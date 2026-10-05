@@ -54,6 +54,9 @@ class AdmissionResult:
     reason: str = ""
     estimated_delay_seconds: float = 0.0
     retry_after_seconds: float = 0.0
+    # Smart scheduler: machine-readable reason (sla_risk | memory_risk | queue_overload | policy_limit)
+    reason_code: str = ""
+    details: Dict[str, Any] = field(default_factory=dict)
 
 
 class InferenceRequest(BaseModel):
@@ -73,6 +76,10 @@ class InferenceRequest(BaseModel):
     stream: bool = Field(default=False, description="Stream back tokens incrementally")
     image: Optional[str] = Field(default=None, description="Optional base64 (or data URI) image for vision models")
     image_tokens: int = Field(default=0, ge=0, description="Vision tokens the image costs; derived from the image")
+    traffic_class: Optional[str] = Field(
+        default=None,
+        description="'real_time' or 'best_effort'. If omitted, LOW priority is treated as best_effort.",
+    )
     request_id: Optional[str] = Field(default=None, description="Client or system request correlation ID")
     arrival_time: float = Field(default_factory=time.time, description="Timestamp when request arrived")
 
@@ -131,6 +138,8 @@ class CompletionRequest(BaseModel):
     priority: Optional[str] = "normal"
     stream: bool = False
     model: Optional[str] = "llama-3.2-1b"
+    sla_target_ms: Optional[float] = Field(default=None, ge=50.0)
+    traffic_class: Optional[str] = None
 
     @field_validator("prompt")
     @classmethod
@@ -266,4 +275,7 @@ class ServerConfig:
     burst_shed_queue_ratio: float = 0.70    # Start shedding LOW priority at 70% queue depth
     soft_memory_limit_ratio: float = 0.88   # Soft memory throttle threshold
     hard_memory_limit_ratio: float = 0.94   # Hard memory preemption threshold
+
+    # Smart scheduler (policy "smart") overrides, e.g. from the YAML `smart:` section.
+    smart: Dict[str, Any] = field(default_factory=dict)
 

@@ -29,7 +29,7 @@ def free_port(start: int) -> int:
 
 
 class Engine:
-    def __init__(self, settings, policy, model_path, sla_ms, port, mock, on_line, log_path=None, vision=False):
+    def __init__(self, settings, policy, model_path, sla_ms, port, mock, on_line, log_path=None, vision=False, config_path=None):
         self.settings = settings
         self.policy = policy
         self.model_path = model_path
@@ -39,6 +39,8 @@ class Engine:
         self.on_line = on_line
         self.log_path = log_path
         self.vision = vision
+        self.config_path = config_path
+        self.trace_cursor = 0
         self.proc = None
         self.reader = None
         self.tail = collections.deque(maxlen=40)
@@ -52,6 +54,8 @@ class Engine:
             "--model-path", self.model_path,
             "--max-model-len", str(context_limit(self.model_path)),
         ]
+        if self.config_path:
+            cmd += ["--config", str(self.config_path)]
         if self.mock:
             cmd.append("--mock")
         if self.vision:
@@ -113,6 +117,17 @@ class Engine:
         try:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=2)) as session:
                 async with session.get(f"{self.base}/stats") as r:
+                    if r.status == 200:
+                        return await r.json()
+        except (aiohttp.ClientError, asyncio.TimeoutError, OSError, ValueError):
+            return None
+        return None
+
+    async def trace(self, since=0, limit=1000):
+        """Smart only: decision-trace events newer than `since` (None when unavailable)."""
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=3)) as session:
+                async with session.get(f"{self.base}/smart/trace", params={"limit": limit, "since_seq": since}) as r:
                     if r.status == 200:
                         return await r.json()
         except (aiohttp.ClientError, asyncio.TimeoutError, OSError, ValueError):
