@@ -59,6 +59,8 @@ from scheduler_engine.types import (
     ServerConfig,
 )
 
+from scheduler_engine.kv_model import derive_footprint
+
 logger = logging.getLogger("velocityllm.smart_policy")
 
 
@@ -110,6 +112,7 @@ class SmartBatchPolicy(DynamicBatchPolicy):
         # Idle GPU-memory baseline (lowest ratio seen). vLLM pre-allocates most of the VRAM at startup,
         # so the ABSOLUTE ratio is high even when idle; only growth above the baseline is real pressure.
         self._mem_baseline_ratio: Optional[float] = None
+        self._seeded = False
 
         # evaluation / observability metrics
         self._completions: Deque[Tuple[float, int, bool, str]] = deque(maxlen=5000)
@@ -132,6 +135,7 @@ class SmartBatchPolicy(DynamicBatchPolicy):
         await super().initialize()
         _, _, total = self.backend.get_gpu_telemetry()
         self._mem_total_mb = total or 8192
+        self._learn_kv_model()
         self.calibrator.key = "|".join([
             type(self.backend).__name__,
             os.path.basename(str(self.config.model_path).rstrip("/")) or "model",
@@ -142,7 +146,25 @@ class SmartBatchPolicy(DynamicBatchPolicy):
             loaded = load_calibration(self.smart.calibration_state_path, self.calibrator, self.predictor)
         if self.smart.warmup_probe and not loaded:
             await self._warmup_probe()
+        self._seeded = loaded or self.smart.warmup_probe
         logger.info("SmartBatchPolicy ready (calibration key: %s).", self.calibrator.key)
+
+    def _learn_kv_model(self) -> None:
+        if not self.smart.kv_auto:
+            return
+        fp = derive_footprint(self.config.model_path)
+        if fp is not None:
+            self.smart.kv_bytes_per_token = fp.kv_bytes_per_token
+            self.smart.model_weights_mb = fp.weights_mb
+            self.kv_estimator.source = "model_config"
+        engine_tokens = self.backend.kv_capacity_tokens()
+        if engine_tokens:
+            self.kv_estimator.engine_capacity_tokens = int(engine_tokens)
+            self.kv_estimator.source = "engine"
+        logger.info(
+            "KV model: %d B/token, capacity source=%s, engine tokens=%s",
+            self.smart.kv_bytes_per_token, self.kv_estimator.source, engine_tokens,
+        )
 
     async def _warmup_probe(self) -> None:
         """
@@ -418,6 +440,12 @@ class SmartBatchPolicy(DynamicBatchPolicy):
                     kv=kv, avg_prompt_tokens=avg_prompt, avg_output_tokens=avg_out,
                     mem_used_mb=mem_used, mem_total_mb=mem_total, aimd_limit=aimd_limit, sla_ms=sla_ms,
                 )
+                if self._predictive_ramp(ctrl, pre, kv, mem_used, mem_total):
+                    cap = self.capacity_planner.compute(
+                        kv=kv, avg_prompt_tokens=avg_prompt, avg_output_tokens=avg_out,
+                        mem_used_mb=mem_used, mem_total_mb=mem_total,
+                        aimd_limit=ctrl.current_concurrency, sla_ms=sla_ms,
+                    )
                 self.capacity = cap
                 self._trace_capacity(cap, ctrl.adjustment_history[n_hist:])
 
@@ -438,6 +466,22 @@ class SmartBatchPolicy(DynamicBatchPolicy):
             except Exception as exc:
                 logger.error("Error in SmartBatchPolicy dispatch loop: %s", exc, exc_info=True)
                 await asyncio.sleep(0.1)
+
+    def _predictive_ramp(self, ctrl, pre, kv: KVSnapshot, mem_used: int, mem_total: int) -> bool:
+        if not self.smart.predictive_ramp or self.queue.size == 0:
+            return False
+        if not self._seeded and self.calibrator.status == "warming_up":
+            return False
+        if self._recent_breach():
+            return False
+        if kv.future_pressure >= self.smart.ramp_pressure_max or pre.details.get("memory_emergency"):
+            return False
+        target = pre.selected_capacity
+        if target <= ctrl.current_concurrency or len(self._active_requests) < ctrl.current_concurrency:
+            return False
+        ctrl.current_concurrency = target
+        ctrl._increase_streak = 0
+        return True
 
     def _start(self, entry: SmartEntry) -> None:
         p = entry.profile
@@ -515,7 +559,7 @@ class SmartBatchPolicy(DynamicBatchPolicy):
             end = time.time()
             total_latency = end - entry.enqueue_time
             exec_time = end - start_exec
-            n = len(chunks)
+            n = self.backend.pop_token_count(rid) or len(chunks)
             sla_s = profile.sla_s
             sla_met = total_latency <= sla_s
             if not sla_met:

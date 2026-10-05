@@ -362,6 +362,7 @@ class KVSnapshot:
     capacity_tokens: int
     safe_tokens: int
     bytes_per_token: int
+    source: str = "estimate"
 
     @property
     def current_pressure(self) -> float:
@@ -375,7 +376,7 @@ class KVSnapshot:
     def to_dict(self) -> Dict[str, Any]:
         mb = lambda t: round(t * self.bytes_per_token / (1024 * 1024), 1)
         return {
-            "source": "estimate",  # token-count model; not read from the engine
+            "source": self.source,
             "current_tokens": self.current_tokens,
             "predicted_future_tokens": self.predicted_future_tokens,
             "queued_tokens": self.queued_tokens,
@@ -394,10 +395,14 @@ class KVEstimator:
         self.server_cfg = server_cfg
         self.smart = smart_cfg
         self.predictor = predictor
+        self.engine_capacity_tokens: int = 0
+        self.source = "estimate"
 
     def capacity_tokens(self, gpu_total_mb: int) -> int:
         if self.smart.kv_capacity_tokens_override > 0:
             return self.smart.kv_capacity_tokens_override
+        if self.engine_capacity_tokens > 0:
+            return self.engine_capacity_tokens
         util = getattr(self.server_cfg, "gpu_memory_utilization", 0.80)
         usable_mb = max(0.0, gpu_total_mb * util - self.smart.model_weights_mb)
         tokens = int(usable_mb * 1024 * 1024 / max(1, self.smart.kv_bytes_per_token))
@@ -417,4 +422,4 @@ class KVEstimator:
                 total_out = min(r.max_tokens, max(pred.p90, int(r.generated * 1.25)))
             future += r.prompt_tokens + max(r.generated, total_out)
         safe = int(cap * self.smart.kv_safe_fraction)
-        return KVSnapshot(current, future, int(queued_tokens), cap, safe, self.smart.kv_bytes_per_token)
+        return KVSnapshot(current, future, int(queued_tokens), cap, safe, self.smart.kv_bytes_per_token, self.source)
