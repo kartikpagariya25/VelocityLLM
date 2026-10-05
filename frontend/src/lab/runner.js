@@ -1,6 +1,6 @@
 import { Sim, buildArrivals, promptTokens, MODELS } from './sim'
 
-const POLICIES = ['static', 'dynamic']
+const POLICIES = ['static', 'dynamic', 'smart']
 
 const sleep = (ms, signal) =>
   new Promise((res) => {
@@ -33,6 +33,9 @@ export const stepsFor = (mode) =>
         ['dynamic_start', 'Dynamic start'],
         ['dynamic_warmup', 'Dynamic warm-up'],
         ['dynamic_load', 'Dynamic load'],
+        ['smart_start', 'Smart start'],
+        ['smart_warmup', 'Smart warm-up'],
+        ['smart_load', 'Smart load'],
         ['scoring', 'Scoring'],
         ['done', 'Done'],
       ]
@@ -68,7 +71,7 @@ export function startSimRun(cfg, emit) {
 
   const boot = async (policy, startName, warmName) => {
     phase(startName, policy)
-    const flags = policy === 'static' ? '--policy static' : `--policy dynamic --sla-ms ${Math.round(cfg.sla * 1000)}`
+    const flags = policy === 'static' ? '--policy static' : `--policy ${policy} --sla-ms ${Math.round(cfg.sla * 1000)}`
     sys(policy, `python3 -m scheduler_engine.server ${flags} --max-concurrency 16`)
     await sleep(350, signal)
     sys(policy, `Loading model ${model.name} (simulated)`)
@@ -106,25 +109,23 @@ export function startSimRun(cfg, emit) {
       if (signal.aborted) return
       if (cfg.mode === 'parallel') {
         phase('start')
-        sims = [make('static', master), make('dynamic', master)]
+        sims = POLICIES.map((p) => make(p, master))
         phase('warmup')
         await sleep(500, signal)
         await play(sims, 'load')
         if (signal.aborted) return
         await finish(sims)
       } else {
-        await boot('static', 'static_start', 'static_warmup')
-        if (signal.aborted) return
-        sims = [make('static', master)]
-        await play(sims, 'static_load')
-        if (signal.aborted) return
-        await boot('dynamic', 'dynamic_start', 'dynamic_warmup')
-        if (signal.aborted) return
-        const s = sims[0]
-        sims = [make('dynamic', master)]
-        await play(sims, 'dynamic_load')
-        if (signal.aborted) return
-        await finish([s, sims[0]])
+        const finished = []
+        for (const policy of POLICIES) {
+          await boot(policy, `${policy}_start`, `${policy}_warmup`)
+          if (signal.aborted) return
+          sims = [make(policy, master)]
+          await play(sims, `${policy}_load`)
+          if (signal.aborted) return
+          finished.push(sims[0])
+        }
+        await finish(finished)
       }
       phase('done')
       emit({ event: 'done', data: { run_id: cfg.id, status: 'completed' } })
@@ -168,7 +169,7 @@ export function startSimSweep(cfg, levels, emit) {
       await sleep(300, signal)
       for (const policy of POLICIES) {
         phase(`${policy}_start`, policy)
-        sys(policy, `python3 -m scheduler_engine.server --policy ${policy}${policy === 'dynamic' ? ` --sla-ms ${Math.round(cfg.sla * 1000)}` : ''} --max-concurrency 16`)
+        sys(policy, `python3 -m scheduler_engine.server --policy ${policy}${policy === 'static' ? '' : ` --sla-ms ${Math.round(cfg.sla * 1000)}`} --max-concurrency 16`)
         await sleep(300, signal)
         phase(`${policy}_warmup`, policy)
         sys(policy, 'Warm-up request sent, discarded from scoring')

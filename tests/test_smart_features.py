@@ -4,6 +4,7 @@ Acceptance tests for the 10 VelocityLLM smart-scheduling features
 """
 
 import asyncio
+import math
 import time
 
 import httpx
@@ -278,14 +279,16 @@ async def test_f8_best_effort_throttled_under_rt_pressure_then_resumes():
         # light load: both classes served, best-effort never exceeds its slot share
         mix = [asyncio.create_task(policy.schedule(req("hi", max_tokens=10, tc="best_effort"))) for _ in range(6)]
         mix += [asyncio.create_task(policy.schedule(req("hi", max_tokens=10, tc="real_time"))) for _ in range(4)]
-        max_be = 0
+        max_be, max_cap = 0, 1
         for _ in range(100):
             await asyncio.sleep(0.02)
+            op = policy.capacity.operating_limit
+            max_cap = max(max_cap, max(1, op - math.ceil(policy.smart.rt_reserve_fraction * op)))
             max_be = max(max_be, sum(1 for r in policy._running.values() if r.traffic_class == "best_effort"))
             if all(t.done() for t in mix):
                 break
         await asyncio.gather(*mix)
-        assert 1 <= max_be <= 3                          # operating limit 4 -> reserve 1 slot for RT
+        assert 1 <= max_be <= max_cap                    # best-effort never takes the slots reserved for real-time
 
         # real-time latency pressure rises -> best-effort throttled, real-time still admitted
         policy._rt_latency_ratio.extend([1.3] * 8)

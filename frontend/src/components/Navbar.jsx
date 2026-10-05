@@ -37,7 +37,9 @@ export default function Navbar() {
     <header className={`nav ${hidden ? 'nav--hidden' : ''}`}>
       <div className="nav__inner wrap">
         <a href="#top" className="nav__brand" onClick={go('top')}>
-          Velocity<span>LLM</span>
+          <img src="/logo.png" alt="" className="nav__logo" />
+          <span className="sr-only">Velocity</span>
+          <span>LLM</span>
         </a>
         <nav className="nav__links" aria-label="Sections">
           {LINKS.map(([id, label]) => (

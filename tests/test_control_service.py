@@ -119,3 +119,74 @@ def test_memory_declines_are_counted_and_explained():
     result = score(rows, 5.0, 2.0)
     assert result["memory_rejected"] == 4
     assert any("GPU memory" in note for note in diagnose(result))
+
+
+# ---- Smart policy in the Arena -------------------------------------------------------------
+def test_smart_is_one_of_the_compared_policies():
+    from control_service.runner import POLICIES
+
+    assert POLICIES == ("static", "dynamic", "smart")
+
+
+def test_smart_settings_come_from_the_model_folder(tmp_path):
+    import json
+
+    from control_service.smartcfg import OVERHEAD_MB, smart_settings, write_smart_config
+
+    (tmp_path / "config.json").write_text(json.dumps({"num_hidden_layers": 24, "num_attention_heads": 14, "num_key_value_heads": 2, "hidden_size": 896}))
+    (tmp_path / "model.safetensors").write_bytes(b"\0" * (50 * 1024 * 1024))
+    st = smart_settings(str(tmp_path))
+    assert st == {"kv_bytes_per_token": 2 * 24 * 2 * 64 * 2, "model_weights_mb": 50 + OVERHEAD_MB}
+    path, written = write_smart_config(str(tmp_path), tmp_path)
+    assert written == st and "kv_bytes_per_token: 12288" in path.read_text()
+    assert smart_settings(str(tmp_path / "missing")) is None
+
+
+def test_smart_settings_handle_nested_and_explicit_head_dim(tmp_path):
+    import json
+
+    from control_service.smartcfg import kv_bytes_per_token
+
+    (tmp_path / "config.json").write_text(json.dumps({"num_hidden_layers": 28, "num_attention_heads": 16, "num_key_value_heads": 8, "hidden_size": 1024, "head_dim": 128}))
+    assert kv_bytes_per_token(tmp_path) == 2 * 28 * 8 * 128 * 2
+    (tmp_path / "config.json").write_text("not json")
+    assert kv_bytes_per_token(tmp_path) is None
+
+
+def test_engine_passes_the_smart_config_only_when_given(tmp_path):
+    from control_service.engine import Engine
+
+    s = Settings(mock=True, results_dir=tmp_path)
+    plain = Engine(s, "dynamic", "mock", 8000, 8100, True, None).command()
+    assert "--config" not in plain
+    smart = Engine(s, "smart", "mock", 8000, 8100, True, None, config_path=tmp_path / "smart_config.yaml").command()
+    assert smart[smart.index("--config") + 1].endswith("smart_config.yaml") and "smart" in smart
+
+
+def test_reject_reasons_use_the_smart_reason_code():
+    from control_service.loadgen import reject_reason
+
+    assert reject_reason({"reason_code": "memory_risk", "reason": "Predicted future KV demand 120%"}) == "memory"
+    assert reject_reason({"reason_code": "sla_risk", "reason": "x"}) == "sla_impossible"
+    assert reject_reason({"reason_code": "policy_limit", "reason": "x"}) == "policy_limit"
+    assert reject_reason({"reason_code": "queue_overload", "reason": "Queue full (100/100)."}) == "queue_full"
+    assert reject_reason({"reason": "Predicted latency (9s) exceeds target SLA"}) == "sla_impossible"  # Static/Dynamic bodies unchanged
+
+
+def test_smart_trace_events_become_console_lines():
+    from control_service.runner import trace_line
+
+    level, cat, rid, msg = trace_line({"event": "reject", "request_id": "r-4", "reason_code": "sla_risk", "reason": "Predicted 9s exceeds SLA 8s."})
+    assert (level, cat, rid) == ("WARNING", "admission", "r-4") and "[sla_risk]" in msg and "rejected" in msg
+    assert trace_line({"event": "capacity_change", "reason": "Capacity 8 -> 10"})[1] == "controller"
+    assert trace_line({"event": "complete", "request_id": "r-1", "reason": "Within SLA.", "details": {"actual_latency_ms": 1500, "tokens": 40}})[3].startswith("Request r-1 completed in 1.50s")
+    assert is_noise('127.0.0.1:1 - "GET /smart/trace?limit=1000&since_seq=3 HTTP/1.1" 200 OK')
+
+
+def test_models_report_their_weight_size(tmp_path):
+    from control_service.models import describe
+
+    (tmp_path / "config.json").write_text("{}")
+    (tmp_path / "model.safetensors").write_bytes(b"\0" * (3 * 1024 * 1024))
+    assert describe("m", str(tmp_path), False)["size_mb"] == 3
+    assert describe("mock-model", "mock", True)["size_mb"] is None

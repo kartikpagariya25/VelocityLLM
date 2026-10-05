@@ -37,7 +37,13 @@ def build_plan(scenario, users, seed, preset, text, max_tokens=None):
     return plan
 
 
+CODE_REASONS = {"sla_risk": "sla_impossible", "memory_risk": "memory", "policy_limit": "policy_limit"}
+
+
 def reject_reason(detail):
+    code = detail.get("reason_code") if isinstance(detail, dict) else None
+    if code in CODE_REASONS:
+        return CODE_REASONS[code]
     reason = str(detail.get("reason", "") if isinstance(detail, dict) else detail).lower()
     if "queue full" in reason:
         return "queue_full"

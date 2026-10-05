@@ -1,8 +1,17 @@
-export const MODELS = [
+const BUILTIN_MODELS = [
   { id: 'llama', name: 'Llama-3.2-1B', tpt: 0.012 },
   { id: 'stablelm', name: 'StableLM-2-1.6B', tpt: 0.016 },
   { id: 'qwen', name: 'Qwen2.5-1.5B', tpt: 0.015 },
 ]
+
+export const MODELS = [...BUILTIN_MODELS]
+
+// Replace the built-in examples with the models found on this machine (from the control service).
+// Decode speed is modelled from the weight size; with nothing found the examples come back.
+export function registerModels(found) {
+  const list = (found || []).map((m) => ({ id: m.id, name: m.name || m.id, tpt: 0.008 + 0.0017 * ((m.size_mb || 2500) / 1024) }))
+  MODELS.splice(0, MODELS.length, ...(list.length ? list : BUILTIN_MODELS))
+}
 
 export const PROMPTS = {
   short: { label: 'Short answer', tokens: 64 },
@@ -28,6 +37,17 @@ const MIN_C = 1
 const MAX_C = 16
 const QUEUE_LIMIT = 100
 const DT = 0.05
+// Smart policy (mirrors scheduler_engine/smart_*.py)
+const SMART_RAMP = 2            // AIMD additive step
+const SMART_SLA_SAFETY = 0.85   // SLA-safe capacity targets 85% of the SLA
+const SMART_MARGIN = 0.05       // early-rejection margin
+const SMART_MARGIN_HIGH = 0.35  // more grace for HIGH priority
+const W_PRIO = 1.0
+const W_URGENCY = 1.5
+const W_SHORT = 0.6
+const W_DOOMED = 1.2
+const AGING = 0.05
+const SHORT_REF = 256
 
 const mulberry = (a) => () => {
   a |= 0
@@ -114,9 +134,13 @@ export class Sim {
     this.perTok = null
     this.done = false
     this.reqs = []
+    this.adaptive = policy !== 'static'
+    this.smart = policy === 'smart'
     this.sys(
       policy === 'static'
         ? `StaticBatchPolicy initialized (fixed concurrency: ${STATIC_C}).`
+        : policy === 'smart'
+        ? `SmartBatchPolicy initialized (initial concurrency: ${STATIC_C}, min: ${MIN_C}, max: ${MAX_C}, SLA target: ${Math.round(sla * 1000)} ms, token-aware admission, deadline-ordered queue).`
         : `DynamicBatchPolicy initialized (initial concurrency: ${STATIC_C}, min: ${MIN_C}, max: ${MAX_C}, SLA target: ${Math.round(sla * 1000)} ms).`,
     )
   }
@@ -154,8 +178,46 @@ export class Sim {
     return { pred: waves * exec + tokens * perTok, perTok }
   }
 
+  // Smart: slack to the deadline after the predicted execution time
+  slack(r) {
+    const perTok = this.perTok ?? this.tpt(this.limit)
+    return r.arrival_s + this.sla - this.t - r.tokens * perTok
+  }
+
+  // Smart: lower score runs first (priority, deadline urgency, short-prompt-first, aging)
+  score(r) {
+    const slack = this.slack(r)
+    const used = 1 - slack / this.sla
+    const doomed = slack < 0
+    const urgency = doomed ? 0 : Math.min(1, Math.max(0, (used - 0.4) / 0.6)) * 2
+    return (
+      W_PRIO * (r.priority === 'HIGH' ? 0 : 1) -
+      W_URGENCY * urgency +
+      W_SHORT * Math.min(1, r.tokens / SHORT_REF) +
+      (doomed ? W_DOOMED : 0) -
+      AGING * (this.t - r.arrival_s)
+    )
+  }
+
+  take() {
+    if (!this.smart) return this.queue.shift()
+    let best = 0
+    for (let i = 1; i < this.queue.length; i++) if (this.score(this.queue[i]) < this.score(this.queue[best])) best = i
+    return this.queue.splice(best, 1)[0]
+  }
+
   arrive(a) {
     const r = { ...a, arrival_s: a.t, start_s: null, end_s: null, left: a.tokens, status: 'pending' }
+    if (this.smart) {
+      if (this.queue.length >= QUEUE_LIMIT) return this.reject(r, 'queue_overload', `Request ${r.id} rejected [queue_overload]: Queue full (${this.queue.length}/${QUEUE_LIMIT}).`, 1)
+      const { pred } = this.predict(r.tokens)
+      const margin = r.priority === 'HIGH' ? SMART_MARGIN_HIGH : SMART_MARGIN
+      if (pred > this.sla * (1 + margin))
+        return this.reject(r, 'sla_risk', `Request ${r.id} rejected [sla_risk]: predicted ${pred.toFixed(2)}s exceeds SLA ${this.sla.toFixed(2)}s (${r.priority} margin ${(margin * 100).toFixed(0)}%).`, Math.max(0.2, pred - this.sla))
+      this.line('admission', 'INFO', `Request ${r.id} admitted [${r.priority}, ${r.tokens} tok, slack ${this.slack(r).toFixed(2)}s] (predicted ${pred.toFixed(2)}s <= SLA ${this.sla.toFixed(2)}s, queue ${this.queue.length}, active ${this.active.length}/${this.limit})`, r.id)
+      this.queue.push(r)
+      return
+    }
     if (this.policy === 'dynamic') {
       if (this.queue.length >= QUEUE_LIMIT) return this.reject(r, 'queue_full', `Request ${r.id} rejected: Queue full (${this.queue.length}/${QUEUE_LIMIT}). Retry after 1.00s`, 1)
       const { pred } = this.predict(r.tokens)
@@ -190,8 +252,21 @@ export class Sim {
     this.reqs.push({ request_id: r.id, arrival_s: r.arrival_s, end_s: this.t, status: 'rejected', tokens: r.tokens })
   }
 
+  // Smart: memory-safe and SLA-safe capacity are computed separately, the tighter one wins
+  capacity() {
+    const memCap = Math.max(MIN_C, Math.min(MAX_C, Math.floor((0.9 - MEM_BASE) / MEM_PER)))
+    const budget = this.sla * SMART_SLA_SAFETY
+    const exec = this.execAvg ?? 128 * (this.perTok ?? this.tptBase)
+    let slaCap = MIN_C
+    for (let c = MIN_C; c <= MAX_C; c++) {
+      if (exec * (this.tpt(c) / this.tpt(Math.max(1, this.limit))) <= budget) slaCap = c
+      else break
+    }
+    return { memCap, slaCap, selected: Math.max(MIN_C, Math.min(memCap, slaCap)) }
+  }
+
   control() {
-    if (this.policy !== 'dynamic' || this.t - this.lastCtl < 0.25) return
+    if (!this.adaptive || this.t - this.lastCtl < 0.25) return
     const recent = this.lat.slice(-20)
     const oldest = [...this.queue, ...this.active].reduce((m, r) => Math.max(m, this.t - r.arrival_s), 0)
     const pressure = Math.max(pct(recent, 95), oldest)
@@ -205,9 +280,15 @@ export class Sim {
       this.limit = Math.max(MIN_C, Math.floor(this.limit * 0.75))
       why = `decrease: p95 ${pressure.toFixed(2)}s near SLA ${this.sla.toFixed(2)}s`
     } else if (this.queue.length > 0 && pressure < this.sla * 0.6 && this.limit < MAX_C && MEM_BASE + MEM_PER * (this.limit + 1) <= 0.9) {
-      this.streak = Math.min((this.streak || 0) + 1, 4)
-      this.limit = Math.min(MAX_C, this.limit + Math.min(2 ** (this.streak - 1), Math.max(1, this.limit >> 1)))
-      why = `increase: p95 ${pressure.toFixed(2)}s well under SLA, queue ${this.queue.length}`
+      if (this.smart) {
+        const cap = this.capacity()
+        this.limit = Math.min(MAX_C, cap.selected, this.limit + SMART_RAMP)
+        if (this.limit !== prev) why = `increase: memory-safe ${cap.memCap}, SLA-safe ${cap.slaCap}, selected ${cap.selected}, queue ${this.queue.length}`
+      } else {
+        this.streak = Math.min((this.streak || 0) + 1, 4)
+        this.limit = Math.min(MAX_C, this.limit + Math.min(2 ** (this.streak - 1), Math.max(1, this.limit >> 1)))
+        why = `increase: p95 ${pressure.toFixed(2)}s well under SLA, queue ${this.queue.length}`
+      }
     }
     if (this.limit <= prev) this.streak = 0
     if (why && this.limit !== prev) {
@@ -238,7 +319,7 @@ export class Sim {
     this.t += DT
     while (this.pending.length && this.pending[0].t <= this.t) this.arrive(this.pending.shift())
     while (this.active.length < this.limit && this.queue.length) {
-      const r = this.queue.shift()
+      const r = this.take()
       r.start_s = this.t
       this.active.push(r)
       this.line('lifecycle', 'INFO', `Request ${r.id} started after ${(this.t - r.arrival_s).toFixed(2)}s in queue`, r.id)
