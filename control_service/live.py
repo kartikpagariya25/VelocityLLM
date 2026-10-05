@@ -25,7 +25,7 @@ class LiveConfig(BaseModel):
     repeats: int = Field(default=1, ge=1, le=5)
     policies: list[Literal["static", "dynamic", "smart"]] = Field(default_factory=lambda: ["static", "dynamic"], min_length=1, max_length=3)
     auto_start: bool = True
-    window_s: float = Field(default=3.0, ge=0.5, le=20.0)
+    window_s: float = Field(default=10.0, ge=0.5, le=30.0)
     seed: int = Field(default=42, ge=0, le=1_000_000)
 
     @field_validator("policies")

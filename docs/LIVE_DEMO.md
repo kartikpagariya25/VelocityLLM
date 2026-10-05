@@ -43,7 +43,7 @@ Test from the phone browser: `http://<PC-IP>:9000/api/preflight` should return J
 ## Flow
 
 1. Phones open `/#/join`, choose requests, traffic type, prompt type, press **Send prompts**.
-2. The first send starts a short countdown (default 3 s, "Join window"). Every further send re-arms it, so both phones land in one run. The host can also press **Start now**, or turn auto-start off.
+2. The first send starts a short countdown (default 10 s, "Join window"). Every further send re-arms it, so both phones land in one run. The host can also press **Start now**, or turn auto-start off.
 3. The engine runs Static then Dynamic (optionally Smart) on the same merged flood. Requests are fired by the server, so the browser connection limit does not matter.
 4. The dashboard shows live panels, concurrency chart, log, results, per-device table and Saved benchmarks. A CSV report per run: `/api/live/runs/<id>/report.csv`.
 

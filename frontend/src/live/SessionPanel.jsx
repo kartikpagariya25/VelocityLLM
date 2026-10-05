@@ -121,7 +121,7 @@ export default function SessionPanel({ onRun, running }) {
           </label>
           <label>
             Join window (s)
-            <input type="number" min="0.5" max="20" step="0.5" defaultValue={cfg.window_s} key={cfg.window_s} onBlur={(e) => update({ window_s: Number(e.target.value) })} />
+            <input type="number" min="0.5" max="30" step="0.5" defaultValue={cfg.window_s} key={cfg.window_s} onBlur={(e) => update({ window_s: Number(e.target.value) })} />
           </label>
           <label className="chk">
             <input type="checkbox" checked={cfg.auto_start} onChange={(e) => update({ auto_start: e.target.checked })} />
