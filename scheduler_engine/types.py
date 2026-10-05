@@ -10,6 +10,7 @@ import time
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from scheduler_engine import vision
 from scheduler_engine.validation import (
     InputValidationError,
     sanitize_prompt,
@@ -70,6 +71,8 @@ class InferenceRequest(BaseModel):
         description="Optional client-specified latency SLA target in milliseconds"
     )
     stream: bool = Field(default=False, description="Stream back tokens incrementally")
+    image: Optional[str] = Field(default=None, description="Optional base64 (or data URI) image for vision models")
+    image_tokens: int = Field(default=0, ge=0, description="Vision tokens the image costs; derived from the image")
     request_id: Optional[str] = Field(default=None, description="Client or system request correlation ID")
     arrival_time: float = Field(default_factory=time.time, description="Timestamp when request arrived")
 
@@ -83,6 +86,10 @@ class InferenceRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_request_bounds(self) -> "InferenceRequest":
+        if self.image:
+            self.image_tokens = vision.estimate_tokens(self.image)
+        else:
+            self.image_tokens = 0
         validate_prompt(self.prompt, max_tokens=self.max_tokens, max_model_len=4096)
         validate_sampling_params(
             temperature=self.temperature,
@@ -104,6 +111,7 @@ class InferenceResponse(BaseModel):
     tokens_per_second: float = 0.0
     sla_met: bool = True
     priority: str = "normal"
+    image_tokens: int = 0
 
 
 class GenerationChunk(BaseModel):
@@ -229,6 +237,7 @@ class ServerConfig:
     policy: str = "dynamic"  # "dynamic" or "static"
     model_path: str = "/home/kartiklin/velocityllm/models/llama-3.2-1b"
     use_mock_backend: bool = False
+    vision: bool = False  # serve a vision-language model and accept images
     host: str = "0.0.0.0"
     port: int = 8000
     gpu_memory_utilization: float = 0.80

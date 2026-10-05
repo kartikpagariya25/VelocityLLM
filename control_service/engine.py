@@ -29,7 +29,7 @@ def free_port(start: int) -> int:
 
 
 class Engine:
-    def __init__(self, settings, policy, model_path, sla_ms, port, mock, on_line, log_path=None):
+    def __init__(self, settings, policy, model_path, sla_ms, port, mock, on_line, log_path=None, vision=False):
         self.settings = settings
         self.policy = policy
         self.model_path = model_path
@@ -38,6 +38,7 @@ class Engine:
         self.mock = mock
         self.on_line = on_line
         self.log_path = log_path
+        self.vision = vision
         self.proc = None
         self.reader = None
         self.tail = collections.deque(maxlen=40)
@@ -53,6 +54,8 @@ class Engine:
         ]
         if self.mock:
             cmd.append("--mock")
+        if self.vision:
+            cmd.append("--vision")
         return cmd
 
     async def _read(self):

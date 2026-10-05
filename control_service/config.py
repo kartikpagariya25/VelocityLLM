@@ -37,3 +37,14 @@ def native_context(path: str) -> int | None:
 def context_limit(path: str, requested: int = DEFAULT_MAX_MODEL_LEN) -> int:
     native = native_context(path)
     return min(requested, native) if native else requested
+
+
+def is_vision(path: str) -> bool:
+    cfg = Path(path)
+    if not cfg.is_absolute():
+        cfg = ROOT / cfg
+    try:
+        data = json.loads((cfg / "config.json").read_text())
+    except (OSError, ValueError):
+        return False
+    return "vision_config" in data

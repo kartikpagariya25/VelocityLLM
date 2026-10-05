@@ -1,11 +1,11 @@
 from pathlib import Path
 
-from .config import ROOT, Settings, native_context
+from .config import ROOT, Settings, is_vision, native_context
 
 
 def discover(settings: Settings) -> dict:
     if settings.mock:
-        return {"mock-model": "mock"}
+        return {"mock-model": "mock", "mock-vision": "mock-vision"}
     found = {}
     if settings.models_dir.is_dir():
         for child in sorted(settings.models_dir.iterdir()):
@@ -27,6 +27,7 @@ def describe(name: str, path: str, mock: bool) -> dict:
         "name": name,
         "path": path,
         "available": available,
+        "vision": name == "mock-vision" if mock else is_vision(path),
         "max_position_embeddings": native_context(path),
         "note": None if available else "Model folder not found on this machine",
     }

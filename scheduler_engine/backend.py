@@ -17,6 +17,7 @@ import random
 import time
 from typing import AsyncIterator, Dict, Optional, Tuple
 
+from scheduler_engine import vision
 from scheduler_engine.types import ServerConfig
 
 logger = logging.getLogger("velocityllm.backend")
@@ -52,6 +53,7 @@ class InferenceBackend(ABC):
         max_tokens: int,
         temperature: float,
         request_id: str,
+        image: Optional[str] = None,
     ) -> AsyncIterator[str]:
         """
         Yield generated text tokens iteratively for the given prompt.
@@ -139,13 +141,17 @@ class VLLMBackend(InferenceBackend):
             self._sampling_params_class = SamplingParams
 
             logger.info("Initializing vLLM AsyncLLMEngine from model: %s", self.config.model_path)
-            engine_args = AsyncEngineArgs(
+            engine_kwargs = dict(
                 model=self.config.model_path,
                 gpu_memory_utilization=self.config.gpu_memory_utilization,
                 max_model_len=self.config.max_model_len,
                 max_num_seqs=self.config.max_concurrency,
                 enable_prefix_caching=True,
             )
+            if self.config.vision:
+                engine_kwargs["limit_mm_per_prompt"] = {"image": 1}
+                engine_kwargs["mm_processor_kwargs"] = {"max_pixels": vision.MAX_PIXELS}
+            engine_args = AsyncEngineArgs(**engine_kwargs)
             self.engine = AsyncLLMEngine.from_engine_args(engine_args)
             logger.info("vLLM AsyncLLMEngine initialized successfully.")
         except ImportError as e:
@@ -154,12 +160,25 @@ class VLLMBackend(InferenceBackend):
                 "vLLM is required for VLLMBackend. Install vLLM or run with --mock flag."
             ) from e
 
+    def _engine_input(self, prompt: str, image: Optional[str]):
+        if not self.config.vision:
+            return prompt
+        text = (
+            "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n"
+            + ("<|vision_start|><|image_pad|><|vision_end|>" if image else "")
+            + f"{prompt}<|im_end|>\n<|im_start|>assistant\n"
+        )
+        if not image:
+            return text
+        return {"prompt": text, "multi_modal_data": {"image": vision.load_image(image)}}
+
     async def generate_stream(
         self,
         prompt: str,
         max_tokens: int,
         temperature: float,
         request_id: str,
+        image: Optional[str] = None,
     ) -> AsyncIterator[str]:
         if not self.engine:
             raise RuntimeError("Backend engine is not initialized.")
@@ -169,10 +188,11 @@ class VLLMBackend(InferenceBackend):
             max_tokens=max_tokens,
         )
 
+        engine_input = self._engine_input(prompt, image)
         previous_text = ""
         produced = 0
         try:
-            async for output in self.engine.generate(prompt, sampling_params, request_id):
+            async for output in self.engine.generate(engine_input, sampling_params, request_id):
                 if output.outputs:
                     produced = len(getattr(output.outputs[0], "token_ids", None) or ())
                     current_text = output.outputs[0].text
@@ -230,10 +250,12 @@ class MockBackend(InferenceBackend):
         config: Optional[ServerConfig] = None,
         tokens_per_second: float = 80.0,
         simulated_ttft_seconds: float = 0.02,
+        prefill_seconds_per_image_token: float = 0.0004,
     ):
         self.config = config or ServerConfig(use_mock_backend=True)
         self.tokens_per_second = tokens_per_second
         self.simulated_ttft_seconds = simulated_ttft_seconds
+        self.prefill_seconds_per_image_token = prefill_seconds_per_image_token
         self.active_inferences = 0
         self.total_generated_tokens = 0
         self.initialized = False
@@ -272,6 +294,7 @@ class MockBackend(InferenceBackend):
         max_tokens: int,
         temperature: float,
         request_id: str,
+        image: Optional[str] = None,
     ) -> AsyncIterator[str]:
         if not self.initialized:
             await self.initialize()
@@ -283,7 +306,8 @@ class MockBackend(InferenceBackend):
         self.active_inferences += 1
         try:
             # Simulate initial prefill / time-to-first-token delay
-            await asyncio.sleep(self.simulated_ttft_seconds)
+            image_tokens = vision.estimate_tokens(image) if image else 0
+            await asyncio.sleep(self.simulated_ttft_seconds + image_tokens * self.prefill_seconds_per_image_token)
 
             # Determine response token length (either max_tokens or natural completion)
             target_tokens = min(max_tokens, random.randint(max(1, max_tokens // 2), max_tokens))

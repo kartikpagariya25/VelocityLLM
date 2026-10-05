@@ -182,6 +182,7 @@ class Orchestrator:
         s = self.settings
         await self.phase(run, f"{policy}_start", policy, rnd)
         port = free_port(s.engine_base_port)
+        vision = describe(cfg["model"], model_path, mock)["vision"]
 
         async def on_line(line):
             if is_noise(line):
@@ -189,7 +190,7 @@ class Orchestrator:
             level, category, rid, message = classify(line)
             await run.emit("log", self._line(run, policy, level, category, message, rid))
 
-        engine = Engine(s, policy, model_path, cfg["sla_ms"], port, mock, on_line, run.dir / f"server_{policy}_r{rnd}.log")
+        engine = Engine(s, policy, model_path, cfg["sla_ms"], port, mock, on_line, run.dir / f"server_{policy}_r{rnd}.log", vision=vision)
         await self.log(run, policy, "python3 -m scheduler_engine.server " + " ".join(engine.command()[3:]))
         poller = watcher = None
         out = {}

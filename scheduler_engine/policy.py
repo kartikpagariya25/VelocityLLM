@@ -144,7 +144,8 @@ class StaticBatchPolicy(SchedulerPolicy):
             generated_chunks = []
             try:
                 async for chunk in self.backend.generate_stream(
-                    request.prompt, request.max_tokens, request.temperature, request.request_id
+                    request.prompt, request.max_tokens, request.temperature, request.request_id,
+                    image=request.image,
                 ):
                     generated_chunks.append(chunk)
             finally:
@@ -176,6 +177,7 @@ class StaticBatchPolicy(SchedulerPolicy):
             queue_time_seconds=round(queue_time, 4),
             execution_time_seconds=round(exec_time, 4),
             tokens_generated=token_count,
+            image_tokens=request.image_tokens,
             tokens_per_second=round(tps, 2),
             sla_met=sla_met,
             priority=request.priority.name.lower(),
@@ -195,7 +197,8 @@ class StaticBatchPolicy(SchedulerPolicy):
             try:
                 idx = 0
                 async for delta in self.backend.generate_stream(
-                    request.prompt, request.max_tokens, request.temperature, request.request_id
+                    request.prompt, request.max_tokens, request.temperature, request.request_id,
+                    image=request.image,
                 ):
                     yield GenerationChunk(
                         request_id=request.request_id,
@@ -412,7 +415,8 @@ class DynamicBatchPolicy(SchedulerPolicy):
 
         try:
             async for chunk in self.backend.generate_stream(
-                request.prompt, request.max_tokens, request.temperature, request.request_id
+                request.prompt, request.max_tokens, request.temperature, request.request_id,
+                    image=request.image,
             ):
                 chunks.append(chunk)
 
@@ -451,6 +455,7 @@ class DynamicBatchPolicy(SchedulerPolicy):
                 queue_time_seconds=round(queue_time, 4),
                 execution_time_seconds=round(exec_time, 4),
                 tokens_generated=token_count,
+                image_tokens=request.image_tokens,
                 tokens_per_second=round(tps, 2),
                 sla_met=sla_met,
                 priority=request.priority.name.lower(),
@@ -519,7 +524,8 @@ class DynamicBatchPolicy(SchedulerPolicy):
             idx = 0
             try:
                 async for chunk in self.backend.generate_stream(
-                    request.prompt, request.max_tokens, request.temperature, request.request_id
+                    request.prompt, request.max_tokens, request.temperature, request.request_id,
+                    image=request.image,
                 ):
                     await queue.put(
                         GenerationChunk(
