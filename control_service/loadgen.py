@@ -21,7 +21,7 @@ SCENARIOS = {
 PRESET_TOKENS = {"short": 64, "medium": 128, "long": 256}
 
 
-def build_plan(scenario, users, seed, preset, text, max_tokens=None):
+def build_plan(scenario, users, seed, preset, text, max_tokens=None, vision=False, image_mix="mixed"):
     spec = SCENARIOS[scenario]
     max_tokens = max_tokens or PRESET_TOKENS.get(preset, 128)
     if max_tokens == PRESET_TOKENS.get(preset, 128) and preset == "custom" and text:
@@ -34,6 +34,10 @@ def build_plan(scenario, users, seed, preset, text, max_tokens=None):
     if preset == "custom" and text and not spec["mixed"]:
         for item in plan:
             item["prompt"] = text.strip()
+    if vision:
+        from .vision_load import attach_images
+
+        attach_images(plan, image_mix, seed)
     return plan
 
 
@@ -67,10 +71,12 @@ async def run_load(base_url, plan, timeout_s, on_request=None, id_prefix="r"):
             "index": i, "request_id": rid, "arrival_s": sent, "start_s": None, "end_s": sent,
             "status": "error", "http_status": None, "tokens": 0, "priority": "NORMAL",
             "reject_reason": None, "retry_after_s": None, "error": None, "is_long": bool(item.get("is_long")),
-            "queue_s": None, "exec_s": None,
+            "queue_s": None, "exec_s": None, "image_tokens": int(item.get("image_tokens") or 0),
         }
         try:
             payload = {"prompt": item["prompt"], "max_tokens": item["max_tokens"], "temperature": 0.0, "request_id": rid}
+            if item.get("image"):
+                payload["image"] = item["image"]
             async with session.post(f"{base_url}/generate", json=payload) as resp:
                 body = None
                 try:
@@ -126,7 +132,7 @@ def write_csv(path: Path, rows):
     import csv
 
     fields = ["index", "request_id", "arrival_s", "start_s", "end_s", "status", "http_status", "tokens",
-              "reject_reason", "retry_after_s", "queue_s", "exec_s", "is_long", "error"]
+              "reject_reason", "retry_after_s", "queue_s", "exec_s", "is_long", "image_tokens", "error"]
     with open(path, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
         w.writeheader()

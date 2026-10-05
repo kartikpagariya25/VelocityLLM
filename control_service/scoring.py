@@ -3,6 +3,7 @@ import statistics
 FIELDS = (
     "p50_s", "p95_s", "p99_s", "tokens_per_s", "served", "offered", "rejected", "errors",
     "within_sla_served", "within_sla_offered", "zero_token_share", "tokens", "memory_rejected", "goodput_tokens_per_s",
+    "image_tokens_per_s", "image_tokens",
 )
 
 
@@ -16,6 +17,7 @@ def score(rows, sla_s, wall_s):
     tokens = sum(r["tokens"] or 0 for r in served)
     within = sum(1 for v in lat if v <= sla_s)
     on_time_tokens = sum(r["tokens"] or 0 for r in served if r["end_s"] - r["arrival_s"] <= sla_s)
+    image_tokens = sum(r.get("image_tokens") or 0 for r in served)
     zero = sum(1 for r in served if not r["tokens"])
     return {
         "p50_s": nearest_rank(lat, 0.5),
@@ -31,6 +33,8 @@ def score(rows, sla_s, wall_s):
         "zero_token_share": zero / len(served) if served else 0.0,
         "tokens": tokens,
         "goodput_tokens_per_s": on_time_tokens / wall_s if wall_s > 0 else 0.0,
+        "image_tokens": image_tokens,
+        "image_tokens_per_s": image_tokens / wall_s if wall_s > 0 else 0.0,
         "memory_rejected": sum(1 for r in rows if r.get("reject_reason") == "memory"),
     }
 
