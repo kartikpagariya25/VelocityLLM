@@ -239,8 +239,10 @@ def create_app(settings: Settings) -> FastAPI:
             w.writerow(["run_id", "date", "model", "gpu", "users", "scenario", "sla_s", "policy", *ROWS])
             for r in sorted(done, key=lambda x: x.created):
                 gpu = (r.results.get("gpu") or {}).get("name", "mock" if r.config.get("mock") else "")
-                for pol in ("static", "dynamic"):
-                    res = r.results["results"][pol]
+                for pol in ("static", "dynamic", "smart"):
+                    res = r.results["results"].get(pol)
+                    if not res:
+                        continue
                     w.writerow([r.id, time.strftime("%Y-%m-%d %H:%M", time.localtime(r.created)), r.config["model"], gpu,
                                 max(r.results.get("levels") or [r.config["requests"]]), r.config["scenario"], r.config["sla_ms"] / 1000, pol,
                                 *[res[k] for k in ROWS]])
@@ -262,9 +264,10 @@ def create_app(settings: Settings) -> FastAPI:
                             headers={"Content-Disposition": f'attachment; filename="{run.id}.json"'})
         buf = io.StringIO()
         w = csv.writer(buf)
-        w.writerow(["metric", "static", "dynamic"])
+        pols = [p for p in ("static", "dynamic", "smart") if p in run.results["results"]]
+        w.writerow(["metric", *pols])
         for k in ROWS:
-            w.writerow([k, run.results["results"]["static"][k], run.results["results"]["dynamic"][k]])
+            w.writerow([k, *[run.results["results"][p][k] for p in pols]])
         return Response(buf.getvalue(), media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="{run.id}.csv"'})
 
     @app.post("/api/replay/{run_id}")

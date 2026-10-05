@@ -10,6 +10,7 @@ export const INFO = {
   burst: ['Burst button', 'Adds extra requests while a simulated run is going, to see how each scheduler copes with a sudden crowd. It is locked during the second half of a sequential run so both schedulers see the same traffic.'],
   static: ['Static scheduler', 'The old way. It lets a fixed number of requests (8) run at once and makes the rest wait in line. It never says no, so under heavy load the line grows and late answers pile up.'],
   dynamic: ['VelocityLLM Dynamic', 'The new way. It watches the waiting line, the promised time and the GPU memory, and changes how many requests run at once. If an answer cannot arrive in time it says no early, instead of failing late.'],
+  smart: ['VelocityLLM Smart', 'Dynamic plus ten extra rules. It counts tokens instead of requests, predicts the memory a reply will still need, keeps memory limit and SLA limit apart, serves the requests closest to their deadline first, lets short prompts pass long ones, and explains every accept or decline. Opt-in: --policy smart.'],
   active: ['Active', 'Requests the GPU is working on right now.'],
   queued: ['Queued', 'Requests waiting for their turn.'],
   limit: ['Limit', 'The most requests allowed to run at once. Static keeps it fixed at 8. Dynamic raises and lowers it while running.'],

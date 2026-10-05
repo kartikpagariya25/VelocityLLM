@@ -13,8 +13,47 @@ from .models import describe, discover
 from .preflight import run_checks
 from .runs import Run
 from .scoring import diagnose, median_of, score
+from .smartcfg import write_smart_config
 
-POLICIES = ("static", "dynamic")
+POLICIES = ("static", "dynamic", "smart")
+
+# Smart explains every decision in its trace; the Console shows them like the other engines' log lines.
+TRACE_CATEGORY = {
+    "admit": "admission", "reject": "admission", "reorder": "admission",
+    "dispatch": "lifecycle", "complete": "lifecycle", "cancel": "lifecycle",
+    "capacity_change": "controller", "throttle": "controller",
+    "calibration": "system", "config_change": "system",
+}
+
+
+def trace_line(ev):
+    """(level, category, request_id, message) for one Smart decision-trace event."""
+    kind = ev.get("event")
+    rid = ev.get("request_id")
+    reason = ev.get("reason") or ""
+    code = ev.get("reason_code")
+    d = ev.get("details") or {}
+    level = "INFO"
+    if kind == "admit":
+        slack = ev.get("slack_ms")
+        msg = f"Request {rid} admitted [{ev.get('traffic_class')}, {ev.get('bucket')}, ~{ev.get('token_estimate')} tok" + (f", slack {slack / 1000:.2f}s" if slack is not None else "") + f"]: {reason}"
+    elif kind == "reject":
+        level = "WARNING"
+        msg = f"Request {rid} rejected [{code}]: {reason}"
+    elif kind == "reorder":
+        msg = f"Request {rid} moved ahead of {d.get('overtook')} [{code}]"
+    elif kind == "dispatch":
+        msg = f"Request {rid} started after {d.get('queue_ms', 0):.0f} ms in queue"
+    elif kind == "complete":
+        msg = f"Request {rid} completed in {d.get('actual_latency_ms', 0) / 1000:.2f}s ({d.get('tokens', 0)} tokens): {reason}"
+    elif kind == "throttle":
+        level = "WARNING" if ev.get("decision") == "throttle_best_effort" else "INFO"
+        msg = f"Smart pressure control: {reason}"
+    elif kind == "capacity_change":
+        msg = f"Smart capacity planner: {reason}"
+    else:
+        msg = f"Smart {kind}: {reason}"
+    return level, TRACE_CATEGORY.get(kind, "system"), rid, msg
 
 
 class RunFailed(Exception):
@@ -190,7 +229,15 @@ class Orchestrator:
             level, category, rid, message = classify(line)
             await run.emit("log", self._line(run, policy, level, category, message, rid))
 
-        engine = Engine(s, policy, model_path, cfg["sla_ms"], port, mock, on_line, run.dir / f"server_{policy}_r{rnd}.log", vision=vision)
+        smart_cfg = None
+        if policy == "smart":
+            smart_cfg, st = write_smart_config(model_path, run.dir)
+            if st:
+                await self.log(run, policy, f"Smart settings for this model: {st['kv_bytes_per_token']} bytes of KV cache per token, {st['model_weights_mb']} MB for weights and runtime")
+            elif not mock:
+                await self.log(run, policy, "Smart settings could not be derived from the model folder, using defaults (memory estimates may be off)", "system", "WARNING")
+
+        engine = Engine(s, policy, model_path, cfg["sla_ms"], port, mock, on_line, run.dir / f"server_{policy}_r{rnd}.log", vision=vision, config_path=smart_cfg)
         await self.log(run, policy, "python3 -m scheduler_engine.server " + " ".join(engine.command()[3:]))
         poller = watcher = None
         out = {}
@@ -207,6 +254,9 @@ class Orchestrator:
                 if warm_rows and all(r["status"] == "error" for r in warm_rows):
                     raise RunFailed(f"Warm-up failed on the {policy} engine: {warm_rows[0]['error']}", engine.tail)
             await self.log(run, policy, "Warm-up finished, results discarded from scoring")
+            if policy == "smart":
+                first = await engine.trace(0, 1)
+                engine.trace_cursor = ((first or {}).get("summary") or {}).get("last_seq", 0)
             watcher = asyncio.create_task(engine.wait_exit())
             for n in levels:
                 await self._settle(s.settle_seconds)
@@ -263,7 +313,16 @@ class Orchestrator:
             await self._poll_once(run, engine, policy, base, load_start)
             await asyncio.sleep(0.5)
 
+    async def _forward_trace(self, run, engine, policy):
+        body = await engine.trace(engine.trace_cursor)
+        for ev in (body or {}).get("events", []):
+            engine.trace_cursor = max(engine.trace_cursor, ev.get("seq", 0))
+            level, category, rid, message = trace_line(ev)
+            await run.emit("log", self._line(run, policy, level, category, message, rid))
+
     async def _poll_once(self, run, engine, policy, base, load_start):
+        if policy == "smart":
+            await self._forward_trace(run, engine, policy)
         st = await engine.stats()
         if not st:
             return

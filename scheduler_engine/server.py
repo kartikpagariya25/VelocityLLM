@@ -5,6 +5,7 @@ with swappable static/dynamic policies and OpenAI-compatible endpoints.
 """
 
 import argparse
+import json
 import yaml
 import asyncio
 from contextlib import asynccontextmanager
@@ -16,6 +17,7 @@ import uuid
 
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 import uvicorn
 
@@ -31,6 +33,8 @@ from scheduler_engine.policy import (
     SchedulerPolicy,
     StaticBatchPolicy,
 )
+from scheduler_engine.smart_policy import SmartBatchPolicy
+from scheduler_engine.smart_routes import build_smart_router
 from scheduler_engine.types import (
     CompletionChoice,
     CompletionRequest,
@@ -101,6 +105,8 @@ async def lifespan(app: FastAPI):
 
     if _config.policy == "static":
         _policy = StaticBatchPolicy(backend=backend, config=_config)
+    elif _config.policy == "smart":
+        _policy = SmartBatchPolicy(backend=backend, config=_config)
     else:
         _policy = DynamicBatchPolicy(backend=backend, config=_config)
 
@@ -122,6 +128,33 @@ app = FastAPI(
     version="3.0.0",
     lifespan=lifespan,
 )
+
+# Dashboard access (browser on another origin) + smart-scheduler endpoints (/smart/*)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[o.strip() for o in os.getenv("VELOCITY_CORS_ORIGINS", "*").split(",")],
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["X-Correlation-ID", "Retry-After"],
+)
+app.include_router(build_smart_router(get_policy))
+
+
+def _apply_scheduling_headers(req: InferenceRequest, request: Request) -> None:
+    """Optional per-request scheduling hints: X-Traffic-Class, X-SLA-Ms."""
+    tc = request.headers.get("X-Traffic-Class")
+    if tc and not req.traffic_class:
+        req.traffic_class = tc
+    sla = request.headers.get("X-SLA-Ms")
+    if sla and req.sla_target_ms is None:
+        try:
+            req.sla_target_ms = max(50.0, float(sla))
+        except ValueError:
+            pass
+
+
+def _rejection_extras(e: AdmissionRejectedException) -> dict:
+    return {"reason_code": getattr(e, "reason_code", ""), "details": getattr(e, "details", {})}
 
 
 @app.middleware("http")
@@ -207,6 +240,7 @@ async def generate(req: InferenceRequest, request: Request):
     policy = get_policy()
     corr_id = getattr(request.state, "correlation_id", req.request_id or f"req-{uuid.uuid4().hex[:12]}")
     req.request_id = corr_id
+    _apply_scheduling_headers(req, request)
 
     # Create asynchronous scheduling task
     schedule_task = asyncio.create_task(policy.schedule(req))
@@ -235,6 +269,7 @@ async def generate(req: InferenceRequest, request: Request):
                 "status": e.status.value,
                 "reason": e.reason,
                 "retry_after_seconds": e.retry_after,
+                **_rejection_extras(e),
             },
             headers=headers,
         )
@@ -266,8 +301,11 @@ async def v1_completions(req: CompletionRequest, request: Request):
         max_tokens=req.max_tokens,
         temperature=req.temperature,
         priority=priority,
+        sla_target_ms=req.sla_target_ms,
+        traffic_class=req.traffic_class,
         request_id=corr_id,
     )
+    _apply_scheduling_headers(inf_req, request)
 
     schedule_task = asyncio.create_task(policy.schedule(inf_req))
 
@@ -313,6 +351,7 @@ async def v1_completions(req: CompletionRequest, request: Request):
                 "status": e.status.value,
                 "reason": e.reason,
                 "retry_after_seconds": e.retry_after,
+                **_rejection_extras(e),
             },
             headers=headers,
         )
@@ -340,6 +379,7 @@ async def generate_stream(req: InferenceRequest, request: Request):
     policy = get_policy()
     corr_id = getattr(request.state, "correlation_id", req.request_id or f"req-{uuid.uuid4().hex[:12]}")
     req.request_id = corr_id
+    _apply_scheduling_headers(req, request)
 
     async def event_generator():
         try:
@@ -354,15 +394,16 @@ async def generate_stream(req: InferenceRequest, request: Request):
                 "correlation_id": corr_id,
                 "reason": e.reason,
                 "retry_after_seconds": e.retry_after,
+                **_rejection_extras(e),
             }
-            yield f"data: {error_payload}\n\n"
+            yield f"data: {json.dumps(error_payload)}\n\n"
         except GPUOutOfMemoryError as e:
             error_payload = {
                 "error": "GPU Out of Memory",
                 "correlation_id": corr_id,
                 "reason": str(e),
             }
-            yield f"data: {error_payload}\n\n"
+            yield f"data: {json.dumps(error_payload)}\n\n"
 
     return StreamingResponse(
         event_generator(),
@@ -494,7 +535,7 @@ def main():
     )
     parser.add_argument(
         "--policy",
-        choices=["dynamic", "static"],
+        choices=["dynamic", "static", "smart"],
         default="dynamic",
         help="Scheduler policy to run (default: dynamic)",
     )
@@ -558,8 +599,10 @@ def main():
     )
     args = parser.parse_args()
 
+    smart_overrides = {}
     if args.config:
         file_defaults = load_config_file(args.config)
+        smart_overrides = file_defaults.get("smart", {}) or {}
         for key, value in file_defaults.items():
             arg_key = key.replace("-", "_")
             if hasattr(args, arg_key):
@@ -581,6 +624,7 @@ def main():
         burst_shed_queue_ratio=args.burst_shed_ratio,
         enable_structured_logging=args.structured_logs,
         api_key=args.api_key,
+        smart=smart_overrides,
     )
     set_config(cfg)
 

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { MODELS, PROMPTS, TRAFFIC, LIMITS, HEAVY_IMAGE, customTokens } from './sim'
+import { MODELS, PROMPTS, TRAFFIC, LIMITS, HEAVY_IMAGE, customTokens, registerModels } from './sim'
 import { startSimRun, startSimSweep, stepsFor } from './runner'
-import { startLiveRun, probe } from './live'
-import { newStore, apply, ROWS, change, sentence, verdictOf, toCsv, download, logLine, f2, onTime, unequalText, hasGoodput } from './store'
+import { startLiveRun, probe, listModels } from './live'
+import { newStore, apply, ROWS, change, sentence, smartSentence, verdictOf, toCsv, download, logLine, f2, onTime, unequalText, hasGoodput } from './store'
 import { drawTimeline, drawConcurrency, niceMax } from './charts'
 import Info from './Info'
 import Count from './Count'
@@ -44,7 +44,7 @@ function Panel({ name, policy, store, onPick }) {
   const hit = useRef([])
   const p = store[policy]
   const m = p.metrics
-  const tMax = niceMax(Math.max(0, ...store.static.series.map((x) => x.t), ...store.dynamic.series.map((x) => x.t)))
+  const tMax = niceMax(Math.max(0, ...store.static.series.map((x) => x.t), ...store.dynamic.series.map((x) => x.t), ...(store.smart?.series || []).map((x) => x.t)))
 
   useEffect(() => {
     if (cv.current) drawTimeline(cv.current, p.reqs, store.cfg.sla, tMax, hit.current)
@@ -78,7 +78,7 @@ function Panel({ name, policy, store, onPick }) {
       <div className={`tiles ${vision ? 'tiles--vision' : ''}`}>
         <Tile info="active" label="Active" value={m?.active ?? 0} />
         <Tile info="queued" label="Queued" value={m?.queued ?? 0} />
-        <Tile info="limit" label="Limit" value={m?.concurrency_limit ?? '-'} tone={policy === 'dynamic' ? 'hot' : ''} />
+        <Tile info="limit" label="Limit" value={m?.concurrency_limit ?? '-'} tone={policy === 'dynamic' ? 'hot' : policy === 'smart' ? 'smart' : ''} />
         <Tile info="done" label="Done" value={m?.completed ?? 0} tone="ok" />
         <Tile info="rejected" label="Rejected" value={m?.rejected ?? 0} tone="rej" />
         <Tile info="p95" label="p95" value={p95 == null ? '-' : `${f2(p95)}s`} />
@@ -147,7 +147,7 @@ function Console({ logs, running }) {
         <span className="count">{view.length} lines</span>
         {running && <span className="live-dot" />}
         <div className="seg">
-          {['all', 'static', 'dynamic'].map((x) => (
+          {['all', 'static', 'dynamic', 'smart'].map((x) => (
             <button key={x} className={pol === x ? 'on' : ''} onClick={() => setPol(x)}>
               {x}
             </button>
@@ -189,7 +189,8 @@ function Console({ logs, running }) {
 function Results({ store, label, recordingUrl }) {
   const s = store.static.result
   const d = store.dynamic.result
-  if (!s && !d) return null
+  const m = store.smart?.result
+  if (!s && !d && !m) return null
   return (
     <section className="results">
       <header>
@@ -209,7 +210,7 @@ function Results({ store, label, recordingUrl }) {
             </button>
             <button
               className="mini"
-              onClick={() => download('velocityllm-results.json', JSON.stringify({ config: store.cfg, static: s, dynamic: d }, null, 2), 'application/json')}
+              onClick={() => download('velocityllm-results.json', JSON.stringify({ config: store.cfg, static: s, dynamic: d, smart: m }, null, 2), 'application/json')}
             >
               JSON
             </button>
@@ -219,12 +220,12 @@ function Results({ store, label, recordingUrl }) {
       {s && d && (
         <div className="heads">
           {[
-            ['Answered on time', `of ${s.offered || d.offered || '?'} users`, onTime(s), onTime(d), (v) => `${Math.round(v)}`, false, 'slaOffered'],
-            ['p99 latency', 'seconds, lower is better', s.p99_s, d.p99_s, (v) => `${v.toFixed(2)} s`, true, 'p99'],
+            ['Answered on time', `of ${s.offered || d.offered || '?'} users`, onTime(s), onTime(d), m && onTime(m), (v) => `${Math.round(v)}`, false, 'slaOffered'],
+            ['p99 latency', 'seconds, lower is better', s.p99_s, d.p99_s, m && m.p99_s, (v) => `${v.toFixed(2)} s`, true, 'p99'],
             unequalText(s, d) && hasGoodput(s, d)
-              ? ['On-time tokens/s', 'text delivered within the SLA', s.goodput_tokens_per_s, d.goodput_tokens_per_s, (v) => v.toFixed(0), false, 'goodput']
-              : ['Throughput (tokens/s)', 'tokens per second', s.tokens_per_s, d.tokens_per_s, (v) => v.toFixed(0), false, 'tokps'],
-          ].map(([name, hint, a, b, fmt, low, info]) => {
+              ? ['On-time tokens/s', 'text delivered within the SLA', s.goodput_tokens_per_s, d.goodput_tokens_per_s, m && m.goodput_tokens_per_s, (v) => v.toFixed(0), false, 'goodput']
+              : ['Throughput (tokens/s)', 'tokens per second', s.tokens_per_s, d.tokens_per_s, m && m.tokens_per_s, (v) => v.toFixed(0), false, 'tokps'],
+          ].map(([name, hint, a, b, c, fmt, low, info]) => {
             const same = info === 'tokps' && unequalText(s, d)
             const delta = change(a, b)
             const v = same || delta == null ? 'same' : verdictOf(delta, low)
@@ -239,6 +240,11 @@ function Results({ store, label, recordingUrl }) {
                 <em>
                   {same ? 'Not comparable: different amount of text' : delta == null || Math.abs(delta) < 0.5 ? hint : `${delta > 0 ? '+' : ''}${delta.toFixed(0)}% for Dynamic`}
                 </em>
+                {c != null && (
+                  <em className="head__smart">
+                    Smart <b>{fmt(c)}</b>
+                  </em>
+                )}
               </div>
             )
           })}
@@ -251,14 +257,23 @@ function Results({ store, label, recordingUrl }) {
               <th>Metric</th>
               <th>Static</th>
               <th>Dynamic</th>
-              <th>Change</th>
+              <th>Smart</th>
+              <th>Dynamic vs Static</th>
+              <th>Smart vs Static</th>
             </tr>
           </thead>
           <tbody>
-            {ROWS.filter(([k]) => (k !== 'errors' || s?.errors || d?.errors) && (k !== 'goodput_tokens_per_s' || hasGoodput(s, d)) && (k !== 'image_tokens_per_s' || s?.image_tokens > 0 || d?.image_tokens > 0)).map(([k, name, fmt, good]) => {
-              const delta = s && d ? change(s[k], d[k]) : null
-              const verdict = good && delta != null ? verdictOf(delta, good === 'low') : 'same'
-              const better = verdict === 'same' ? null : verdict === 'better'
+            {ROWS.filter(([k]) => (k !== 'errors' || s?.errors || d?.errors || m?.errors) && (k !== 'goodput_tokens_per_s' || hasGoodput(s, d)) && (k !== 'image_tokens_per_s' || s?.image_tokens > 0 || d?.image_tokens > 0 || m?.image_tokens > 0)).map(([k, name, fmt, good]) => {
+              const cell = (other) => {
+                const delta = s && other ? change(s[k], other[k]) : null
+                if (delta == null) return { text: '', cls: '' }
+                const verdict = good ? verdictOf(delta, good === 'low') : 'same'
+                const cls = !good || verdict === 'same' ? '' : verdict === 'better' ? 'good' : 'bad'
+                const text = good ? `${delta > 0 ? '+' : ''}${delta.toFixed(0)}%` : s[k] === other[k] ? '' : `${other[k] - s[k] > 0 ? '+' : ''}${other[k] - s[k]}`
+                return { text, cls }
+              }
+              const dCell = cell(d)
+              const mCell = cell(m)
               return (
                 <tr key={k}>
                   <td>
@@ -267,21 +282,22 @@ function Results({ store, label, recordingUrl }) {
                   </td>
                   <td>{s ? fmt(s[k]) : '-'}</td>
                   <td>{d ? fmt(d[k]) : '-'}</td>
-                  <td className={better == null ? '' : better ? 'good' : 'bad'}>
-                    {delta == null ? '' : good ? `${delta > 0 ? '+' : ''}${delta.toFixed(0)}%` : s[k] === d[k] ? '' : `${d[k] - s[k] > 0 ? '+' : ''}${d[k] - s[k]}`}
-                  </td>
+                  <td>{m ? fmt(m[k]) : '-'}</td>
+                  <td className={dCell.cls}>{dCell.text}</td>
+                  <td className={mCell.cls}>{mCell.text}</td>
                 </tr>
               )
             })}
           </tbody>
         </table>
       </div>
-      {[...(s?.warnings || []).map((w) => `Static: ${w}`), ...(d?.warnings || []).map((w) => `Dynamic: ${w}`)].map((w) => (
+      {[...(s?.warnings || []).map((w) => `Static: ${w}`), ...(d?.warnings || []).map((w) => `Dynamic: ${w}`), ...(m?.warnings || []).map((w) => `Smart: ${w}`)].map((w) => (
         <p key={w} className="warnline">
           {w}
         </p>
       ))}
       {s && d && <p className="verdict">{sentence(store.cfg, s, d, store.users, store.repeats)}</p>}
+      {s && m && <p className="verdict">{smartSentence(store.cfg, s, m)}</p>}
     </section>
   )
 }
@@ -348,6 +364,7 @@ export default function Lab() {
   }
   const [probeState, setProbeState] = useState(null)
   const [liveInfo, setLiveInfo] = useState(null)
+  const [simVer, setSimVer] = useState(0)
   const [, setTick] = useState(0)
   const [burstN, setBurstN] = useState(50)
   const [recheck, setRecheck] = useState(0)
@@ -400,8 +417,21 @@ export default function Lab() {
   }, [liveInfo, live])
 
   useEffect(() => {
-    if (!live && !MODELS.some((m) => m.id === cfg.model)) setCfg((c) => ({ ...c, model: MODELS[0].id }))
+    if (live) return
+    let stale = false
+    listModels(urls.pc).then((found) => {
+      if (stale) return
+      registerModels(found)
+      setSimVer((v) => v + 1)
+    })
+    return () => {
+      stale = true
+    }
   }, [live])
+
+  useEffect(() => {
+    if (!live && !MODELS.some((m) => m.id === cfg.model)) setCfg((c) => ({ ...c, model: MODELS[0].id }))
+  }, [live, simVer])
 
   const set = (k) => (e) => setCfg((c) => ({ ...c, [k]: e.target.type === 'range' || e.target.type === 'number' || k === 'repeats' ? Number(e.target.value) : e.target.value }))
   const st = store.current
@@ -414,7 +444,7 @@ export default function Lab() {
 
   const finishRecord = useCallback((s) => {
     if (!s.static.result || !s.dynamic.result) return
-    const rec = { id: s.cfg.id, at: new Date().toISOString(), cfg: s.cfg, source: s.source, static: s.static.result, dynamic: s.dynamic.result }
+    const rec = { id: s.cfg.id, at: new Date().toISOString(), cfg: s.cfg, source: s.source, static: s.static.result, dynamic: s.dynamic.result, smart: s.smart.result || null }
     setHistory((h) => {
       const next = [rec, ...h].slice(0, 12)
       try {
@@ -486,14 +516,16 @@ export default function Lab() {
   const doBurst = () => ctl.current.burst(burstN)
 
   const phaseIdx = st ? Math.max(0, st.steps.findIndex(([id]) => id === st.phase)) : -1
-  const shown = viewing ? { cfg: viewing.cfg, static: { result: viewing.static }, dynamic: { result: viewing.dynamic } } : st
+  const shown = viewing ? { cfg: viewing.cfg, static: { result: viewing.static }, dynamic: { result: viewing.dynamic }, smart: { result: viewing.smart || null } } : st
   const tokensEst = cfg.prompt === 'custom' ? customTokens(cfg.text) : PROMPTS[cfg.prompt].tokens
 
   return (
     <div className="lab">
       <header className="lab__bar">
         <a href="#/" className="lab__brand">
-          Velocity<span>LLM</span>
+          <img src="/logo.png" alt="" className="lab__logo" />
+          <span className="sr-only">Velocity</span>
+          <span>LLM</span>
         </a>
         <span className="lab__title">Velocity Arena</span>
         <span className={`src src--${shownSource}`}>{SOURCE_BADGE[shownSource]}</span>
@@ -651,7 +683,7 @@ export default function Lab() {
             {err && <span className="err">{err}</span>}
             {st?.status === 'failed' && <span className="err">{st.error}</span>}
             {live && !running && <span className="hint">Burst works in the simulation only.</span>}
-            {running && cfg.mode === 'sequential' && st.phase === 'dynamic_load' && <span className="hint">Burst is locked here so both engines face the same traffic.</span>}
+            {running && cfg.mode === 'sequential' && (st.phase === 'dynamic_load' || st.phase === 'smart_load') && <span className="hint">Burst is locked here so every engine faces the same traffic.</span>}
           </div>
           {live && liveInfo && (
             <ul className="checks">
@@ -667,7 +699,7 @@ export default function Lab() {
           {live && liveInfo?.mock && <p className="note">This control service uses the mock engine: the whole pipeline is real, but no GPU or model is involved, so the numbers say nothing about real hardware.</p>}
           {source === 'sim' && (
             <p className="note">
-              Simulation: both engines run on one modelled GPU (concurrency-dependent decode speed, 8-slot static batch, AIMD controller and admission rules from the repo). Numbers are illustrative, not measured. Pick PC GPU or Cloud GPU for real runs.
+              Simulation: all three engines run on one modelled GPU (concurrency-dependent decode speed, 8-slot static batch, AIMD controller, and the admission, capacity and queue rules from the repo). Numbers are illustrative, not measured. Pick PC GPU or Cloud GPU for real runs.
             </p>
           )}
         </section>
@@ -694,10 +726,14 @@ export default function Lab() {
 
         {st ? (
           <>
-            <div className="duo">
+            <div className="duo duo--3">
               <Panel name="Static scheduler" policy="static" store={st} onPick={setPick} />
               <Panel name="VelocityLLM Dynamic" policy="dynamic" store={st} onPick={setPick} />
+              <Panel name="VelocityLLM Smart" policy="smart" store={st} onPick={setPick} />
             </div>
+            {live && st.status === 'done' && !st.smart.result && (
+              <p className="note">This run has no Smart data: it came from a control service without Smart support. Update the control service to compare Smart on the GPU.</p>
+            )}
             <section className="aimd">
               <header>
                 <h3>
@@ -706,7 +742,8 @@ export default function Lab() {
                 <span className="legend">
                   <i className="lg lg--s" />
                   Static limit (fixed {8})<i className="lg lg--d" />
-                  Dynamic limit (AIMD)
+                  Dynamic limit (AIMD)<i className="lg lg--m" />
+                  Smart limit (capacity planner)
                 </span>
               </header>
               <canvas ref={cc} className="aimd__cv" />
@@ -715,7 +752,7 @@ export default function Lab() {
             <Results store={shown} label={viewing ? 'from history' : st.source === 'replay' ? 'recorded run' : ''} recordingUrl={live && st.runId && st.status === 'done' ? `${url.replace(/\/+$/, '')}/api/runs/${st.runId}/recording` : null} />
           </>
         ) : (
-          <p className="idle">Choose the traffic, set the SLA and press Run comparison. Static and Dynamic face identical requests, and every scheduler decision shows up in the log below.</p>
+          <p className="idle">Choose the traffic, set the SLA and press Run comparison. Static, Dynamic and Smart face identical requests, and every scheduler decision shows up in the log below.</p>
         )}
 
         <Pressure store={st} running={running} disabled={blocked || (live && modelOptions.length === 0)} onRun={launch} onJudgePreset={judgePreset} />
@@ -745,7 +782,7 @@ export default function Lab() {
                   <button onClick={() => (setViewing(h), window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }))}>
                     <b>{h.cfg.users} users</b> {h.cfg.traffic}, SLA {h.cfg.sla.toFixed(1)} s, {SOURCE_BADGE[h.source] || 'simulated'}
                     <span>
-                      p99 {f2(h.static.p99_s)} s to {f2(h.dynamic.p99_s)} s
+                      p99 {f2(h.static.p99_s)} s to {f2(h.dynamic.p99_s)} s{h.smart ? ` to ${f2(h.smart.p99_s)} s` : ''}
                     </span>
                   </button>
                 </li>

@@ -32,11 +32,20 @@ logger = logging.getLogger("velocityllm.policy")
 
 class AdmissionRejectedException(Exception):
     """Exception raised when admission controller rejects a request."""
-    def __init__(self, status: AdmissionStatus, reason: str, retry_after: float):
+    def __init__(
+        self,
+        status: AdmissionStatus,
+        reason: str,
+        retry_after: float,
+        reason_code: str = "",
+        details: Optional[dict] = None,
+    ):
         super().__init__(reason)
         self.status = status
         self.reason = reason
         self.retry_after = retry_after
+        self.reason_code = reason_code          # sla_risk | memory_risk | queue_overload | policy_limit
+        self.details = details or {}            # predicted latency, SLA, token/KV estimates, ...
 
 
 class SchedulerPolicy(ABC):

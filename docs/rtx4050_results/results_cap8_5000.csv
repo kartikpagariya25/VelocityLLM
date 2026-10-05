@@ -1,0 +1,10 @@
+model,policy,run,sla_ms,status,ok,rejected,errors,p50_s,p99_s,tok_s,goodput_pct,kv_est_tokens,kv_vllm_tokens,note
+qwen2.5-0.5b,static,1,5000,OK,100,0,0,4.92,8.51,847,56,,,
+qwen2.5-0.5b,static,2,5000,OK,100,0,0,4.95,9.04,802,56,,,
+qwen2.5-0.5b,static,3,5000,OK,100,0,0,4.63,8.18,908,56,,,
+qwen2.5-0.5b,dynamic,1,5000,OK,55,45,0,2.74,4.57,909,55,,,HTTP 429: Predicted latency (5.30s) exceeds target SLA (5.00s) under cx45
+qwen2.5-0.5b,dynamic,2,5000,OK,69,31,0,3.62,6.0,855,56,,,HTTP 429: Predicted latency (5.25s) exceeds target SLA (5.00s) under cx31
+qwen2.5-0.5b,dynamic,3,5000,OK,19,81,0,3.22,6.09,250,16,,,HTTP 429: Predicted latency (5.50s) exceeds target SLA (5.00s) under cx81
+qwen2.5-0.5b,smart,1,5000,OK,64,36,0,3.03,5.37,854,57,279108,316880,HTTP 429: sla_riskx36
+qwen2.5-0.5b,smart,2,5000,OK,64,36,0,3.13,5.51,806,57,279108,316880,HTTP 429: sla_riskx36
+qwen2.5-0.5b,smart,3,5000,OK,56,44,0,2.94,4.73,870,56,279108,316880,HTTP 429: sla_riskx44

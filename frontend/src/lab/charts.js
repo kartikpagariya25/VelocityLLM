@@ -1,4 +1,4 @@
-const C = { ink: '#0a0a0a', mute: '#6f6f69', line: '#e7e7e2', stat: '#8c8c86', dyn: '#ff4d1c', dynSoft: 'rgba(255,77,28,.16)', statSoft: 'rgba(140,140,134,.18)', ok: '#17b06b', miss: '#f0a500', rej: '#e8384f' }
+const C = { ink: '#0a0a0a', mute: '#6f6f69', line: '#e7e7e2', stat: '#8c8c86', dyn: '#ff4d1c', smart: '#2f6df6', dynSoft: 'rgba(255,77,28,.16)', statSoft: 'rgba(140,140,134,.18)', smartSoft: 'rgba(47,109,246,.14)', ok: '#17b06b', miss: '#f0a500', rej: '#e8384f' }
 
 export function setup(canvas) {
   const dpr = Math.min(2, window.devicePixelRatio || 1)
@@ -123,7 +123,7 @@ export const drawTimeline = guard(function drawTimeline(canvas, reqs, sla, tMax,
 export const drawConcurrency = guard(function drawConcurrency(canvas, store) {
   const { ctx, w, h } = setup(canvas)
   const pad = { l: 30, r: 96, t: 14, b: 18 }
-  const all = [...store.static.series, ...store.dynamic.series]
+  const all = [...store.static.series, ...store.dynamic.series, ...(store.smart?.series || [])]
   const tMax = niceMax(Math.max(0, ...all.map((p) => p.t)))
   const yMax = Math.max(16, ...all.map((p) => Math.max(p.limit, p.active))) + 1
   axis(ctx, w, h, pad, tMax, 'limit (line) and requests running (shaded)')
@@ -165,12 +165,16 @@ export const drawConcurrency = guard(function drawConcurrency(canvas, store) {
     ctx.fillText(`${name} ${last.limit}`, X(last.t) + 8, Y(last.limit) + 3)
     ctx.font = '10px JetBrains Mono, monospace'
   }
+  const smartSeries = store.smart?.series || []
   area(store.static.series, 'active', C.statSoft)
   area(store.dynamic.series, 'active', C.dynSoft)
+  area(smartSeries, 'active', C.smartSoft)
   step(store.static.series, C.stat, [5, 4], 1.6)
   step(store.dynamic.series, C.dyn, [], 2.4)
+  step(smartSeries, C.smart, [2, 3], 2.4)
   tag(store.static.series, C.stat, 'Static')
   tag(store.dynamic.series, C.dyn, 'Dynamic')
+  tag(smartSeries, C.smart, 'Smart')
   const last = store.dynamic.series[store.dynamic.series.length - 1]
   if (last) {
     const live = store.status === 'running' && !calm()
@@ -193,8 +197,8 @@ export const drawConcurrency = guard(function drawConcurrency(canvas, store) {
 export const drawSweep = guard(function drawSweep(canvas, levels, data, key, opts) {
   const { ctx, w, h } = setup(canvas)
   const pad = { l: 44, r: 14, t: 18, b: 24 }
-  const pts = (pol) => levels.filter((n) => data[pol][n]).map((n) => [n, data[pol][n][key] * (opts.scale || 1)])
-  const all = [...pts('static'), ...pts('dynamic')]
+  const pts = (pol) => (data[pol] ? levels.filter((n) => data[pol][n]).map((n) => [n, data[pol][n][key] * (opts.scale || 1)]) : [])
+  const all = [...pts('static'), ...pts('dynamic'), ...pts('smart')]
   const xMax = Math.max(...levels)
   const yMax = opts.fixedMax || niceTop(Math.max(opts.sla || 0, ...all.map((p) => p[1]), 1) * 1.05)
   const X = (n) => pad.l + (n / xMax) * (w - pad.l - pad.r)
@@ -253,6 +257,7 @@ export const drawSweep = guard(function drawSweep(canvas, levels, data, key, opt
   }
   line(pts('static'), C.stat, 2)
   line(pts('dynamic'), C.dyn, 3)
+  line(pts('smart'), C.smart, 3)
   ctx.restore()
   if (k < 1) later(canvas, () => drawSweep(canvas, levels, data, key, opts))
 })

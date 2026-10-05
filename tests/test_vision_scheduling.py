@@ -129,3 +129,27 @@ async def test_controller_ramps_with_weighted_image_load():
     finally:
         await policy.shutdown()
     assert stats.total_completed == 40
+
+
+async def test_smart_policy_forwards_images_and_counts_their_tokens():
+    from scheduler_engine.smart_policy import SmartBatchPolicy
+
+    seen = []
+
+    class Recorder(MockBackend):
+        async def generate_stream(self, prompt, max_tokens, temperature, request_id, image=None):
+            seen.append(image)
+            async for chunk in super().generate_stream(prompt, max_tokens, temperature, request_id, image=image):
+                yield chunk
+
+    config = ServerConfig(policy="smart", use_mock_backend=True, vision=True, target_sla_ms=60000.0)
+    policy = SmartBatchPolicy(backend=Recorder(tokens_per_second=400.0, simulated_ttft_seconds=0.01), config=config)
+    await policy.initialize()
+    try:
+        plain = policy.profiler.profile(request(None, max_tokens=16))
+        heavy = policy.profiler.profile(request(896, max_tokens=16))
+        await policy.schedule(request(448, max_tokens=8))
+    finally:
+        await policy.shutdown()
+    assert heavy.prompt_tokens - plain.prompt_tokens == 1024
+    assert any(item for item in seen)

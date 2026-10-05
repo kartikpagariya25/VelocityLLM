@@ -1,0 +1,19 @@
+model,policy,run,sla_ms,status,ok,rejected,errors,p50_s,p99_s,tok_s,goodput_pct,kv_est_tokens,kv_vllm_tokens,note
+qwen2.5-0.5b,static,1,8000,OK,100,0,0,4.47,7.95,932,100,,,
+qwen2.5-0.5b,static,2,8000,OK,100,0,0,4.68,8.21,861,96,,,
+qwen2.5-0.5b,static,3,8000,OK,100,0,0,4.71,8.22,898,98,,,
+qwen2.5-0.5b,dynamic,1,8000,OK,100,0,0,3.48,6.5,1074,100,,,
+qwen2.5-0.5b,dynamic,2,8000,OK,98,2,0,4.38,6.83,1122,98,,,HTTP 429: Severe burst backpressure (90/100 queued). Shedding NORMAL px2
+qwen2.5-0.5b,dynamic,3,8000,OK,99,1,0,3.73,6.75,1072,99,,,HTTP 429: Severe burst backpressure (90/100 queued). Shedding NORMAL px1
+qwen2.5-0.5b,smart,1,8000,OK,100,0,0,2.97,4.98,1508,100,279108,316256,
+qwen2.5-0.5b,smart,2,8000,OK,100,0,0,3.83,5.7,1326,100,279108,316256,
+qwen2.5-0.5b,smart,3,8000,OK,100,0,0,3.51,5.41,1417,100,279108,316256,
+smollm2-360m,static,1,8000,OK,100,0,0,0.84,2.1,434,100,,,
+smollm2-360m,static,2,8000,OK,100,0,0,0.82,1.57,408,100,,,
+smollm2-360m,static,3,8000,OK,100,0,0,0.91,1.58,504,100,,,
+smollm2-360m,dynamic,1,8000,OK,90,10,0,0.72,1.25,484,90,,,HTTP 429: Severe burst backpressure (90/100 queued). Shedding NORMAL px10
+smollm2-360m,dynamic,2,8000,OK,99,1,0,0.72,1.45,365,99,,,HTTP 429: Severe burst backpressure (90/100 queued). Shedding NORMAL px1
+smollm2-360m,dynamic,3,8000,OK,91,9,0,1.07,1.76,357,91,,,HTTP 429: Severe burst backpressure (90/100 queued). Shedding NORMAL px9
+smollm2-360m,smart,1,8000,OK,99,1,0,0.72,1.47,487,99,90183,101968,HTTP 429: queue_overloadx1
+smollm2-360m,smart,2,8000,OK,100,0,0,1.21,2.07,392,100,90183,101968,
+smollm2-360m,smart,3,8000,OK,90,10,0,0.65,1.31,771,90,90183,101968,HTTP 429: queue_overloadx10

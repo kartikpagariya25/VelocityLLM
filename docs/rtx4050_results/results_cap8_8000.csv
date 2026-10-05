@@ -1,0 +1,10 @@
+model,policy,run,sla_ms,status,ok,rejected,errors,p50_s,p99_s,tok_s,goodput_pct,kv_est_tokens,kv_vllm_tokens,note
+qwen2.5-0.5b,static,1,8000,OK,100,0,0,4.6,8.09,915,97,,,
+qwen2.5-0.5b,static,2,8000,OK,100,0,0,5.07,8.83,845,90,,,
+qwen2.5-0.5b,static,3,8000,OK,100,0,0,4.84,8.37,868,96,,,
+qwen2.5-0.5b,dynamic,1,8000,OK,98,2,0,4.9,8.48,850,97,,,HTTP 429: Severe burst backpressure (90/100 queued). Shedding NORMAL px2
+qwen2.5-0.5b,dynamic,2,8000,OK,27,73,0,3.52,6.15,350,27,,,HTTP 429: Predicted latency (8.58s) exceeds target SLA (8.00s) under cx73
+qwen2.5-0.5b,dynamic,3,8000,OK,42,58,0,4.14,7.02,468,42,,,HTTP 429: Predicted latency (8.49s) exceeds target SLA (8.00s) under cx58
+qwen2.5-0.5b,smart,1,8000,OK,80,20,0,3.49,6.36,916,80,279108,316880,HTTP 429: sla_riskx20
+qwen2.5-0.5b,smart,2,8000,OK,98,2,0,4.73,8.25,877,96,279108,316880,HTTP 429: queue_overloadx2
+qwen2.5-0.5b,smart,3,8000,OK,98,2,0,4.88,8.45,831,96,279108,316880,HTTP 429: queue_overloadx2
