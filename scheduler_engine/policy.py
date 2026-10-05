@@ -298,6 +298,7 @@ class DynamicBatchPolicy(SchedulerPolicy):
         self.backend_ready = False
         self._last_telemetry: Tuple[float, int, int] = (0.0, 0, 0)
         self._max_attempts = 2
+        self._burn_in_completions = 8
 
         # Phase 3 Telemetry
         self.client_disconnects_count = 0
@@ -491,9 +492,11 @@ class DynamicBatchPolicy(SchedulerPolicy):
             self.total_tokens += token_count
             self.latencies.append(total_latency)
             self.queue_times.append(queue_time)
-            self.exec_times.append(exec_time)
-            if len(self.exec_times) > 100:
-                self.exec_times.pop(0)
+            learning = self.total_completed > self._burn_in_completions
+            if learning:
+                self.exec_times.append(exec_time)
+                if len(self.exec_times) > 100:
+                    self.exec_times.pop(0)
             if len(self.latencies) > 500:
                 self.latencies.pop(0)
             if len(self.queue_times) > 500:
@@ -501,10 +504,11 @@ class DynamicBatchPolicy(SchedulerPolicy):
 
             # Update admission controller service-time estimate
             self.total_image_tokens += request.image_tokens
-            try:
-                self.admission_controller.update_completion_stats(exec_time, token_count, request.image_tokens)
-            except Exception as err:
-                logger.error("Service-time update failed (%s); estimates unchanged.", err)
+            if learning:
+                try:
+                    self.admission_controller.update_completion_stats(exec_time, token_count, request.image_tokens)
+                except Exception as err:
+                    logger.error("Service-time update failed (%s); estimates unchanged.", err)
 
             tps = (token_count / exec_time) if exec_time > 0 else 0.0
 
