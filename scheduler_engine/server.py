@@ -550,6 +550,7 @@ def main():
         default=None,
         help="If set, requires this value in the X-API-Key header for all requests except /health",
     )
+    parser.add_argument("--kv-cache-dtype", default="auto", choices=["auto", "fp8"], help="KV cache storage type (fp8 fits about twice the tokens)")
     parser.add_argument("--host", default="0.0.0.0", help="Host address to bind")
     parser.add_argument("--port", type=int, default=8000, help="Port to listen on")
     parser.add_argument(
@@ -621,6 +622,7 @@ def main():
         max_concurrency=args.max_concurrency,
         initial_concurrency=args.initial_concurrency,
         max_model_len=args.max_model_len,
+        kv_cache_dtype=args.kv_cache_dtype,
         burst_shed_queue_ratio=args.burst_shed_ratio,
         enable_structured_logging=args.structured_logs,
         api_key=args.api_key,

@@ -5,7 +5,10 @@ weights. Both come from the model's own config.json and weight files, so any mod
 models/ works without editing a config by hand.
 """
 import json
+import os
 from pathlib import Path
+
+from scheduler_engine.kv_model import kv_bytes_from_config
 
 from .models import resolve, weights_mb
 
@@ -20,15 +23,20 @@ def kv_bytes_per_token(model_dir: Path):
         cfg = json.loads((model_dir / "config.json").read_text())
     except (OSError, ValueError):
         return None
-    cfg = cfg.get("text_config", cfg)
-    try:
-        layers = int(cfg["num_hidden_layers"])
-        heads = int(cfg["num_attention_heads"])
-        kv_heads = int(cfg.get("num_key_value_heads") or heads)
-        head_dim = int(cfg.get("head_dim") or int(cfg["hidden_size"]) // heads)
-    except (KeyError, TypeError, ValueError, ZeroDivisionError):
-        return None
-    return 2 * layers * kv_heads * head_dim * DTYPE_BYTES
+    return kv_bytes_from_config(cfg, kv_dtype_bytes())
+
+
+def kv_dtype_bytes() -> int:
+    return 1 if os.environ.get("VELOCITY_KV_CACHE_DTYPE", "auto") == "fp8" else DTYPE_BYTES
+
+
+def env_overrides() -> dict:
+    out = {}
+    for pair in os.environ.get("VELOCITY_SMART_OVERRIDES", "").split(","):
+        key, sep, value = pair.partition("=")
+        if sep and key.strip():
+            out[key.strip()] = value.strip()
+    return out
 
 
 def smart_settings(model_path: str):
@@ -50,7 +58,11 @@ def write_smart_config(model_path: str, directory: Path):
         return None, None
     path = Path(directory) / "smart_config.yaml"
     try:
-        path.write_text("smart:\n" + "".join(f"  {k}: {v}\n" for k, v in st.items()))
+        smart = {**st, **env_overrides()}
+        text = "smart:\n" + "".join(f"  {k}: {v}\n" for k, v in smart.items())
+        if os.environ.get("VELOCITY_KV_CACHE_DTYPE", "auto") == "fp8":
+            text += "kv_cache_dtype: fp8\n"
+        path.write_text(text)
     except OSError:
         return None, None
     return path, st

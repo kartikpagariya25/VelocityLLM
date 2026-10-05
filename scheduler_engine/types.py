@@ -255,6 +255,7 @@ class ServerConfig:
     port: int = 8000
     gpu_memory_utilization: float = 0.80
     max_model_len: int = 4096
+    kv_cache_dtype: str = "auto"  # "fp8" halves KV bytes per token and roughly doubles the tokens that fit
     
     # Dynamic Scheduler specific
     min_concurrency: int = 2
