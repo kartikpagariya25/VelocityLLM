@@ -69,8 +69,8 @@ class SchedulerPolicy(ABC):
         for entry in dropped:
             waited = now - entry.enqueue_time
             request = entry.request
-            predicted = waited + self.admission_controller.estimate_execution_time(request.max_tokens)
-            retry_after = max(0.5, round(self.admission_controller.estimate_wait_time(self.queue.size, self.adaptive_controller.current_concurrency), 2))
+            predicted = waited + self.admission_controller.estimate_execution_time(request.max_tokens, request.image_tokens)
+            retry_after = max(0.5, round(self.admission_controller.estimate_wait_time(self.queue.size, self.adaptive_controller.current_concurrency, None, self.queue.image_tokens_waiting), 2))
             self.total_rejected += 1
             self.admission_controller.total_rejected_sla += 1
             self.admission_controller.total_dropped_waiting += 1
@@ -118,6 +118,7 @@ class StaticBatchPolicy(SchedulerPolicy):
         self.total_accepted = 0
         self.total_completed = 0
         self.total_tokens = 0
+        self.total_image_tokens = 0
         self.sla_breaches = 0
         self.latencies: List[float] = []
         self._active_count = 0
@@ -158,6 +159,7 @@ class StaticBatchPolicy(SchedulerPolicy):
 
         self.total_completed += 1
         self.total_tokens += token_count
+        self.total_image_tokens += request.image_tokens
         self.latencies.append(total_latency)
         if len(self.latencies) > 500:
             self.latencies.pop(0)
@@ -242,6 +244,7 @@ class StaticBatchPolicy(SchedulerPolicy):
             gpu_utilization_percent=float(util),
             gpu_memory_used_mb=mem_used,
             gpu_memory_total_mb=mem_total,
+            total_image_tokens=self.total_image_tokens,
         )
 
     async def shutdown(self) -> None:
@@ -267,6 +270,8 @@ class DynamicBatchPolicy(SchedulerPolicy):
 
         # Concurrency state
         self._active_requests: Dict[str, asyncio.Task] = {}
+        self._active_weights: Dict[str, float] = {}
+        self._active_image_tokens: Dict[str, int] = {}
         self._dispatcher_task: Optional[asyncio.Task] = None
         self._stop_event = asyncio.Event()
 
@@ -275,6 +280,7 @@ class DynamicBatchPolicy(SchedulerPolicy):
         self.total_rejected = 0
         self.total_completed = 0
         self.total_tokens = 0
+        self.total_image_tokens = 0
         self.sla_breaches = 0
         self.latencies: List[float] = []
         self.queue_times: List[float] = []
@@ -287,6 +293,15 @@ class DynamicBatchPolicy(SchedulerPolicy):
         self.burst_shed_count = 0
         self.oom_recoveries_count = 0
         self.validation_errors_count = 0
+
+    def _request_weight(self, request: InferenceRequest) -> float:
+        """Concurrency slots a request occupies: one, plus one more per image_slot_tokens of image prefill."""
+        return 1.0 + request.image_tokens / max(1, self.config.image_slot_tokens)
+
+    def _release(self, request_id: str) -> None:
+        self._active_requests.pop(request_id, None)
+        self._active_weights.pop(request_id, None)
+        self._active_image_tokens.pop(request_id, None)
 
     def _memory_baseline(self, mem_used: int) -> Optional[int]:
         """GPU memory in use once the model is loaded; later growth is what signals real pressure."""
@@ -315,6 +330,7 @@ class DynamicBatchPolicy(SchedulerPolicy):
                 in_flight=len(self._active_requests),
                 gpu_memory_baseline_mb=self._memory_baseline(mem_used),
                 concurrency_ceiling=self.config.max_concurrency,
+                queued_image_tokens=self.queue.image_tokens_waiting,
             )
         except Exception as err:
             logger.error("Admission check failed (%s); admitting request %s.", err, request.request_id)
@@ -338,7 +354,8 @@ class DynamicBatchPolicy(SchedulerPolicy):
             return True
 
         # 2. Check if request is currently executing on backend
-        task = self._active_requests.pop(request_id, None)
+        task = self._active_requests.get(request_id)
+        self._release(request_id)
         if task and not task.done():
             task.cancel()
             self.client_disconnects_count += 1
@@ -389,15 +406,17 @@ class DynamicBatchPolicy(SchedulerPolicy):
 
                 await self._drop_hopeless()
 
-                available_slots = max(0, effective_limit - len(self._active_requests))
-                for _ in range(available_slots):
-                    if self.queue.size == 0:
-                        break
-
+                while self.queue.size > 0 and sum(self._active_weights.values()) < effective_limit:
                     entry = await self.queue.dequeue(timeout=0.01)
-                    if entry and not entry.cancelled:
-                        task = asyncio.create_task(self._execute_request(entry))
-                        self._active_requests[entry.request.request_id] = task
+                    if entry is None:
+                        break
+                    if entry.cancelled:
+                        continue
+                    request = entry.request
+                    task = asyncio.create_task(self._execute_request(entry))
+                    self._active_requests[request.request_id] = task
+                    self._active_weights[request.request_id] = self._request_weight(request)
+                    self._active_image_tokens[request.request_id] = request.image_tokens
 
                 await asyncio.sleep(0.01)
             except asyncio.CancelledError:
@@ -443,7 +462,8 @@ class DynamicBatchPolicy(SchedulerPolicy):
                 self.queue_times.pop(0)
 
             # Update admission controller service-time estimate
-            self.admission_controller.update_completion_stats(exec_time, token_count)
+            self.total_image_tokens += request.image_tokens
+            self.admission_controller.update_completion_stats(exec_time, token_count, request.image_tokens)
 
             tps = (token_count / exec_time) if exec_time > 0 else 0.0
 
@@ -479,7 +499,7 @@ class DynamicBatchPolicy(SchedulerPolicy):
             if not entry.future.done():
                 entry.future.set_exception(err)
         finally:
-            self._active_requests.pop(request.request_id, None)
+            self._release(request.request_id)
 
     async def schedule(self, request: InferenceRequest) -> InferenceResponse:
         if not request.request_id:
@@ -588,6 +608,8 @@ class DynamicBatchPolicy(SchedulerPolicy):
             gpu_memory_used_mb=mem_used,
             gpu_memory_total_mb=mem_total,
             avg_queue_wait_seconds=avg_q,
+            total_image_tokens=self.total_image_tokens,
+            active_image_tokens=sum(self._active_image_tokens.values()),
             client_disconnects_count=self.client_disconnects_count,
             burst_shed_count=self.admission_controller.total_burst_shed,
             oom_recoveries_count=self.oom_recoveries_count,
