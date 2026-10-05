@@ -223,7 +223,7 @@ class Orchestrator:
                         "policy": policy, "request_id": row["request_id"], "arrival_s": round(row["arrival_s"], 3),
                         "start_s": None if row["start_s"] is None else round(row["start_s"], 3),
                         "end_s": round(row["end_s"], 3), "status": row["status"], "http_status": row["http_status"],
-                        "tokens": row["tokens"], "priority": row["priority"], "reject_reason": row["reject_reason"],
+                        "tokens": row["tokens"], "image_tokens": row["image_tokens"], "priority": row["priority"], "reject_reason": row["reject_reason"],
                         "retry_after_s": row["retry_after_s"], "error": row["error"],
                     })
 

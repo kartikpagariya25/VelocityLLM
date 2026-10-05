@@ -37,6 +37,7 @@ export async function startLiveRun(base, cfg, emit) {
         mode: 'sequential',
         prompt_preset: cfg.prompt,
         prompt_text: cfg.prompt === 'custom' ? cfg.text : null,
+        image_mix: cfg.imageMix || 'mixed',
       }),
     })
   } catch {

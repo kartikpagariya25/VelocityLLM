@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { MODELS, PROMPTS, TRAFFIC, LIMITS, customTokens } from './sim'
+import { MODELS, PROMPTS, TRAFFIC, LIMITS, HEAVY_IMAGE, customTokens } from './sim'
 import { startSimRun, startSimSweep, stepsFor } from './runner'
 import { startLiveRun, probe } from './live'
 import { newStore, apply, ROWS, change, sentence, verdictOf, toCsv, download, logLine, f2, onTime, unequalText, hasGoodput } from './store'
@@ -8,15 +8,16 @@ import Info from './Info'
 import Count from './Count'
 import Pressure from './Pressure'
 import Saved from './Saved'
+import Vision from './Vision'
 import { startReplay, configOf } from './replay'
 import './Lab.css'
 
 const PC_DEFAULT = window.location.port === '9000' ? window.location.origin : 'http://localhost:9000'
 const SOURCE_BADGE = { sim: 'Simulated run', pc: 'PC GPU', cloud: 'College GPU', mock: 'Mock engine', replay: 'Recorded run' }
-const INFO_KEY = { p50_s: 'p50', p95_s: 'p95', p99_s: 'p99', tokens_per_s: 'tokps', goodput_tokens_per_s: 'goodput', within_sla_served: 'slaServed', within_sla_offered: 'slaOffered', served: 'served', rejected: 'rejected', errors: 'errors' }
+const INFO_KEY = { p50_s: 'p50', p95_s: 'p95', p99_s: 'p99', tokens_per_s: 'tokps', goodput_tokens_per_s: 'goodput', image_tokens_per_s: 'imageTokens', within_sla_served: 'slaServed', within_sla_offered: 'slaOffered', served: 'served', rejected: 'rejected', errors: 'errors' }
 const CATS = ['admission', 'controller', 'lifecycle', 'system']
 const BURSTS = [20, 50, 100]
-const DEF = { users: 30, prompt: 'medium', text: '', traffic: 'flood', sla: 8, model: 'llama', mode: 'sequential', speed: 4, repeats: 1 }
+const DEF = { users: 30, prompt: 'medium', text: '', traffic: 'flood', sla: 8, model: 'llama', mode: 'sequential', speed: 4, repeats: 1, imageMix: 'mixed' }
 
 const loadHistory = () => {
   try {
@@ -60,6 +61,10 @@ function Panel({ name, policy, store, onPick }) {
   const lat = served.map((r) => r.end_s - r.arrival_s).sort((a, b) => a - b)
   const p95 = lat.length ? lat[Math.min(lat.length - 1, Math.ceil(0.95 * lat.length) - 1)] : null
   const state = p.result ? 'Done' : m ? 'Running' : store.status === 'running' ? 'Waiting' : 'Idle'
+  const vision = !!store.cfg.vision
+  const imageTok = served.reduce((n, r) => n + (r.image_tokens || 0), 0)
+  const heavy = p.reqs.filter((r) => (r.image_tokens || 0) >= HEAVY_IMAGE)
+  const heavyOnTime = heavy.filter((r) => r.status === 'served' && r.end_s - r.arrival_s <= store.cfg.sla).length
 
   return (
     <section className={`panel panel--${policy}`}>
@@ -70,7 +75,7 @@ function Panel({ name, policy, store, onPick }) {
         </h3>
         <span className={`badge badge--${state.toLowerCase()}`}>{state}</span>
       </header>
-      <div className="tiles">
+      <div className={`tiles ${vision ? 'tiles--vision' : ''}`}>
         <Tile info="active" label="Active" value={m?.active ?? 0} />
         <Tile info="queued" label="Queued" value={m?.queued ?? 0} />
         <Tile info="limit" label="Limit" value={m?.concurrency_limit ?? '-'} tone={policy === 'dynamic' ? 'hot' : ''} />
@@ -79,6 +84,8 @@ function Panel({ name, policy, store, onPick }) {
         <Tile info="p95" label="p95" value={p95 == null ? '-' : `${f2(p95)}s`} />
         <Tile info="mem" label="GPU mem" value={m ? `${Math.round((m.gpu_mem_used_mb / m.gpu_mem_total_mb) * 100)}%` : '-'} />
         <Tile info="tokens" label="Tokens" value={m?.tokens ?? 0} />
+        {vision && <Tile info="imageTokens" label="Image tok" value={imageTok} />}
+        {vision && <Tile info="bigImages" label="Big images" value={heavy.length ? `${heavyOnTime}/${heavy.length}` : '-'} tone="hot" />}
       </div>
       <p className="cap">
         Request timeline <Info id="timeline" />
@@ -90,6 +97,12 @@ function Panel({ name, policy, store, onPick }) {
         late
         <i className="dot dot--rej" />
         declined
+        {vision && (
+          <>
+            <i className="dot dot--big" />
+            large image
+          </>
+        )}
       </p>
       <canvas ref={cv} className="timeline" onClick={click} aria-label={`${name} request timeline`} />
     </section>
@@ -242,7 +255,7 @@ function Results({ store, label, recordingUrl }) {
             </tr>
           </thead>
           <tbody>
-            {ROWS.filter(([k]) => (k !== 'errors' || s?.errors || d?.errors) && (k !== 'goodput_tokens_per_s' || hasGoodput(s, d))).map(([k, name, fmt, good]) => {
+            {ROWS.filter(([k]) => (k !== 'errors' || s?.errors || d?.errors) && (k !== 'goodput_tokens_per_s' || hasGoodput(s, d)) && (k !== 'image_tokens_per_s' || s?.image_tokens > 0 || d?.image_tokens > 0)).map(([k, name, fmt, good]) => {
               const delta = s && d ? change(s[k], d[k]) : null
               const verdict = good && delta != null ? verdictOf(delta, good === 'low') : 'same'
               const better = verdict === 'same' ? null : verdict === 'better'
@@ -288,6 +301,7 @@ function Inspector({ req, sla, onClose }) {
     ['Execution', exec == null ? '-' : `${f2(exec)} s`],
     ['Total latency', req.status === 'served' ? `${f2(total)} s` : '-'],
     ['Tokens', req.tokens],
+    ...(req.image_tokens ? [['Image tokens', req.image_tokens]] : []),
     ['HTTP', req.http_status],
   ]
   if (req.status === 'rejected') rows.push(['Retry after', `${f2(req.retry_after_s)} s`])
@@ -393,7 +407,8 @@ export default function Lab() {
   const st = store.current
   const shownSource = st ? (st.info?.mock ? 'mock' : st.source) : source
   const liveModels = (liveInfo?.models || []).filter((m) => m.available)
-  const modelOptions = live ? liveModels.map((m) => ({ id: m.id, name: m.name })) : MODELS
+  const modelOptions = live ? liveModels.map((m) => ({ id: m.id, name: m.name, vision: !!m.vision })) : MODELS
+  const isVision = !!modelOptions.find((m) => m.id === cfg.model)?.vision
   const blocked = live && (probeState !== 'ok' || !liveInfo?.ok)
   const running = st?.status === 'running'
 
@@ -418,7 +433,7 @@ export default function Lab() {
     const sweep = levels && levels.length > 1
     if (!sweep && (cfg.users < LIMITS.users[0] || cfg.users > LIMITS.users[1])) return setErr(`Users must be between ${LIMITS.users[0]} and ${LIMITS.users[1]}.`)
     if (cfg.prompt === 'custom' && !cfg.text.trim()) return setErr('Type a prompt or pick a preset.')
-    const full = { ...cfg, id: `run-${Date.now().toString(36)}`, levels: sweep ? levels : [cfg.users], users: sweep ? Math.max(...levels) : cfg.users }
+    const full = { ...cfg, vision: isVision, id: `run-${Date.now().toString(36)}`, levels: sweep ? levels : [cfg.users], users: sweep ? Math.max(...levels) : cfg.users }
     const s = newStore(full, stepsFor(cfg.mode), source)
     s.users = full.users
     s.repeats = live ? cfg.repeats : 1
@@ -517,7 +532,7 @@ export default function Lab() {
                   </option>
                 ))}
               </select>
-              <small>{cfg.traffic === 'mixed' ? '70% short, 30% long' : `about ${tokensEst} output tokens per request`}</small>
+              <small>{cfg.traffic === 'mixed' ? '70% short, 30% long' : `about ${tokensEst} output tokens per request`}{isVision ? ', the question is about the image' : ''}</small>
             </label>
             <label>
               <span className="lt">SLA target <Info id="sla" /></span>
@@ -533,9 +548,11 @@ export default function Lab() {
                 {modelOptions.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.name}
+                    {m.vision && !/vision/i.test(m.name) ? ' (vision)' : ''}
                   </option>
                 ))}
               </select>
+              {isVision && <small>Vision model: every request carries an image.</small>}
             </label>
             <label>
               <span className="lt">Run mode <Info id="mode" /></span>
@@ -607,6 +624,7 @@ export default function Lab() {
               </small>
             </label>
           )}
+          {isVision && <Vision mix={cfg.imageMix} onChange={(imageMix) => setCfg((c) => ({ ...c, imageMix }))} />}
           <div className="actions">
             {!running ? (
               <button className="go" onClick={run} disabled={blocked || (live && modelOptions.length === 0)}>
@@ -659,7 +677,7 @@ export default function Lab() {
         )}
         {st?.info && (
           <p className="strip">
-            {st.info.model} · {st.info.mock ? 'mock engine' : st.info.gpu?.name || 'GPU not detected'} · SLA {st.info.sla_s.toFixed(1)} s · {st.info.users} users · {st.info.scenario}
+            {st.info.model} · {st.info.mock ? 'mock engine' : st.info.gpu?.name || 'GPU not detected'} · SLA {st.info.sla_s.toFixed(1)} s · {st.info.users} users · {st.info.scenario}{st.info.vision ? ` · images: ${st.info.image_mix || cfg.imageMix}` : ''}
             {st.info.repeats > 1 ? ` · ${st.info.repeats} repeats (median)` : ''}
           </p>
         )}
