@@ -28,6 +28,8 @@ def start_server(args, policy, limit):
         cmd += ["--initial-concurrency", str(limit), "--max-concurrency", str(max(limit, 32))]
     if args.mock:
         cmd.append("--mock")
+    if args.vision:
+        cmd.append("--vision")
     proc = subprocess.Popen(cmd, cwd=ROOT, stdout=log, stderr=log)
     deadline = time.time() + args.startup_timeout
     while time.time() < deadline:
@@ -53,7 +55,7 @@ def stop_server(proc, settle):
 
 
 def load(args, users, scenario="flood", preset="medium", max_tokens=None):
-    plan = build_plan(scenario, users, args.seed, preset, None, max_tokens=max_tokens)
+    plan = build_plan(scenario, users, args.seed, preset, None, max_tokens=max_tokens, vision=args.vision, image_mix=args.image_mix)
     rows, wall = asyncio.run(run_load(f"http://localhost:{args.port}", plan, 600.0))
     return score(rows, args.sla, wall), wall
 
@@ -72,6 +74,8 @@ def main():
     p.add_argument("--scenario", choices=["flood", "mixed"], default="flood")
     p.add_argument("--preset", choices=["short", "medium", "long"], default="medium")
     p.add_argument("--dynamic", action="store_true", help="also run the dynamic policy on the same traffic")
+    p.add_argument("--vision", action="store_true", help="send images to a vision-language model")
+    p.add_argument("--image-mix", choices=["small", "mixed", "large"], default="mixed")
     p.add_argument("--mock", action="store_true")
     args = p.parse_args()
 
@@ -91,11 +95,11 @@ def main():
         finally:
             stop_server(proc, args.settle)
 
-    print(f"\n{'setup':<16}{'users':>6}{'wall s':>8}{'served':>8}{'on time':>9}{'tok/s':>7}{'goodput':>9}{'p50 s':>7}{'p99 s':>7}")
+    print(f"\n{'setup':<16}{'users':>6}{'wall s':>8}{'served':>8}{'on time':>9}{'tok/s':>7}{'goodput':>9}{'img tok/s':>10}{'p50 s':>7}{'p99 s':>7}")
     for name, users, wall, r in table:
         on_time = round(r["within_sla_offered"] * r["offered"])
         print(f"{name:<16}{users:>6}{wall:>8.1f}{r['served']:>8}{on_time:>9}{r['tokens_per_s']:>7.0f}"
-              f"{r['goodput_tokens_per_s']:>9.0f}{r['p50_s']:>7.2f}{r['p99_s']:>7.2f}")
+              f"{r['goodput_tokens_per_s']:>9.0f}{r['image_tokens_per_s']:>10.0f}{r['p50_s']:>7.2f}{r['p99_s']:>7.2f}")
     (OUT / "probe_summary.json").write_text(json.dumps(
         [{"setup": n, "users": u, "wall_s": w, **r} for n, u, w, r in table], indent=2))
     print(f"\nSaved: {OUT / 'probe_summary.json'}")
