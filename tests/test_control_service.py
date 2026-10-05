@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 from control_service.app import create_app
 from control_service.config import Settings
 from control_service.logparse import classify, is_noise
-from control_service.scoring import median_of, score
+from control_service.scoring import diagnose, median_of, score
 
 
 def row(status, arrival, end, tokens=10):
@@ -31,6 +31,7 @@ def test_score_counts_and_sla():
     assert (r["served"], r["offered"], r["rejected"], r["errors"]) == (2, 4, 1, 1)
     assert r["within_sla_served"] == 0.5 and r["within_sla_offered"] == 0.25
     assert r["tokens_per_s"] == pytest.approx(2.0)
+    assert r["goodput_tokens_per_s"] == pytest.approx(1.0)
 
 
 def test_median_of_repeats():
@@ -79,3 +80,42 @@ def test_diagnose_flags_invalid_results():
     assert "mis-calibrated" in diagnose({**base, "served": 5, "rejected": 95})[0]
     assert "failed" in diagnose({**base, "errors": 40})[0]
     assert "zero tokens" in diagnose({**base, "zero_token_share": 0.9})[0]
+
+
+def test_score_reports_total_tokens_and_requests_use_greedy_sampling():
+    from control_service.scoring import score
+
+    rows = [
+        {"status": "served", "arrival_s": 0.0, "end_s": 1.0, "tokens": 10},
+        {"status": "served", "arrival_s": 0.0, "end_s": 2.0, "tokens": 30},
+    ]
+    assert score(rows, 8.0, 2.0)["tokens"] == 40
+    import inspect
+    from control_service import loadgen
+
+    assert '"temperature": 0.0' in inspect.getsource(loadgen)
+
+
+def test_frontend_cache_headers(tmp_path):
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "index.html").write_text("<html></html>")
+    (tmp_path / "assets" / "app.js").write_text("x")
+    c = TestClient(create_app(Settings(mock=True, frontend_dir=tmp_path)))
+    assert c.get("/").headers["cache-control"] == "no-cache"
+    assert "immutable" in c.get("/assets/app.js").headers["cache-control"]
+
+
+def test_live_adapter_forwards_sweep_events():
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parent.parent / "frontend" / "src" / "lab" / "live.js").read_text()
+    assert "'level_result'" in src
+
+
+def test_memory_declines_are_counted_and_explained():
+    rows = [row("served", 0, 1)] + [
+        {"status": "rejected", "arrival_s": 0, "end_s": 0, "tokens": 0, "reject_reason": "memory"} for _ in range(4)
+    ]
+    result = score(rows, 5.0, 2.0)
+    assert result["memory_rejected"] == 4
+    assert any("GPU memory" in note for note in diagnose(result))

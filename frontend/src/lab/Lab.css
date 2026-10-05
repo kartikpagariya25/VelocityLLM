@@ -74,6 +74,8 @@
 .lab .console .search { width: 140px; background: #151515; border-color: #333; color: #fff; padding: 4px 10px; font-size: .78rem; }
 .console .mini, .results .mini, .history .mini { border: 1px solid #333; border-radius: 999px; }
 .results .mini, .history .mini { color: var(--ink); border-color: var(--line); }
+.console .mini { color: #aaa; }
+.console .mini:hover:not(:disabled) { color: #fff; border-color: var(--hot); }
 .logbox { height: 340px; overflow: auto; padding: 10px 16px; font-family: var(--mono); font-size: .74rem; line-height: 1.7; }
 .empty { color: #77776f; }
 .ln { display: grid; grid-template-columns: 64px 34px 78px 1fr; gap: 10px; white-space: pre-wrap; animation: in .25s var(--ease); }
@@ -154,3 +156,20 @@ td.good { color: var(--ok); font-weight: 600; } td.bad { color: var(--bad); font
 .burst { align-items: center; }
 .lt { display: inline-flex; align-items: center; gap: 6px; }
 .warnline { margin: 0; padding: 10px 14px; border-radius: 10px; background: #fff4e0; border: 1px solid #f0c27a; color: #7a4a00; font-size: .86rem; }
+.heads { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.head { display: grid; gap: 4px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.head span { display: inline-flex; align-items: center; gap: 6px; font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--mute); }
+.head b { font-family: var(--mono, monospace); font-size: 1.45rem; }
+.head b i { font-style: normal; font-size: .8rem; color: var(--mute); margin: 0 4px; }
+.head em { font-style: normal; font-size: .82rem; color: var(--mute); }
+.head--better { border-color: #7cc79a; }
+.head--better em { color: #1f8a4c; }
+.head--worse { border-color: #e59a9a; }
+.head--worse em { color: #c0392b; }
+
+.key { display: flex; align-items: center; gap: 6px; font-size: .72rem; color: var(--mute); margin: 0 0 6px; }
+.key .dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; margin-left: 8px; }
+.dot--ok { background: #17b06b; } .dot--late { background: #f0a500; } .dot--rej { background: #e8384f; }
+.head b { font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .ln { animation: none; } }
+.pressure .lg--s { border-top-style: solid; }

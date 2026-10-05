@@ -5,6 +5,7 @@ and latency SLA deadlines to decide whether to accept, queue, or shed load (HTTP
 """
 
 import logging
+import math
 import time
 from typing import Optional, Tuple
 
@@ -47,6 +48,7 @@ class AdmissionController:
         self.total_rejected_overload = 0
         self.total_rejected_sla = 0
         self.total_burst_shed = 0
+        self.total_dropped_waiting = 0
 
     def update_completion_stats(self, latency_seconds: float, tokens_generated: int) -> None:
         """Update service time estimation metrics from completed requests."""
@@ -74,13 +76,28 @@ class AdmissionController:
         self._last_completion = now
         logger.warning("No completions for %.0fs; service-time estimates decayed toward baseline.", self._stale_after_seconds)
 
-    def estimate_wait_time(self, current_queue_size: int, active_concurrency: int) -> float:
+    @staticmethod
+    def projected_slots(active_concurrency: int, concurrency_ceiling: Optional[int] = None) -> float:
+        """
+        Effective number of parallel slots to plan with. The adaptive controller can raise the limit
+        within about a second, but throughput grows roughly with the square root of the batch size
+        (4x the concurrency gave about 1.9x the tokens/s on the reference laptop GPU), so a reachable
+        ceiling is credited at that rate instead of fully.
+        """
+        base = max(1, active_concurrency)
+        if concurrency_ceiling and concurrency_ceiling > base:
+            return base * math.sqrt(concurrency_ceiling / base)
+        return float(base)
+
+    def estimate_wait_time(
+        self, current_queue_size: int, active_concurrency: int, concurrency_ceiling: Optional[int] = None
+    ) -> float:
         """
         Estimate queueing wait time in seconds before an arriving request begins execution.
-        E[wait] = (queue_length * avg_service_time) / max(1, concurrency)
+        E[wait] = (queue_length * avg_service_time) / projected parallel slots
         """
-        effective_concurrency = max(1, active_concurrency)
-        return (current_queue_size * self._ema_service_time) / effective_concurrency
+        slots = self.projected_slots(active_concurrency, concurrency_ceiling)
+        return (current_queue_size * self._ema_service_time) / slots
 
     def estimate_execution_time(self, max_tokens: int) -> float:
         """
@@ -88,6 +105,16 @@ class AdmissionController:
         """
         # Prefill / TTFT base + generation phase
         return 0.05 + (max_tokens * self._ema_token_time)
+
+    def sla_limit_seconds(self, request: InferenceRequest) -> float:
+        """SLA the request is judged against, including the extra grace HIGH priority gets."""
+        target = (request.sla_target_ms or self.default_sla_ms) / 1000.0
+        return target * (1.35 if request.priority == RequestPriority.HIGH else 1.05)
+
+    def is_hopeless(self, request: InferenceRequest, waited_seconds: float) -> bool:
+        """True when the request would miss its SLA even if it ran at twice the usual speed."""
+        optimistic_exec = 0.5 * self.estimate_execution_time(request.max_tokens)
+        return waited_seconds + optimistic_exec > self.sla_limit_seconds(request)
 
     def evaluate(
         self,
@@ -97,6 +124,8 @@ class AdmissionController:
         gpu_memory_used_mb: int = 0,
         gpu_memory_total_mb: int = 8192,
         in_flight: Optional[int] = None,
+        gpu_memory_baseline_mb: Optional[int] = None,
+        concurrency_ceiling: Optional[int] = None,
     ) -> AdmissionResult:
         """
         Evaluate whether to admit or reject an incoming request.
@@ -105,7 +134,12 @@ class AdmissionController:
         """
         self.total_evaluated += 1
         self._decay_stale_estimates()
-        est_wait = self.estimate_wait_time(current_queue_size, active_concurrency)
+        memory_grew = (
+            gpu_memory_baseline_mb is None
+            or gpu_memory_total_mb <= 0
+            or gpu_memory_used_mb - gpu_memory_baseline_mb >= 0.03 * gpu_memory_total_mb
+        )
+        est_wait = self.estimate_wait_time(current_queue_size, active_concurrency, concurrency_ceiling)
 
         # 1. Check Hard Queue Capacity Limit
         if current_queue_size >= self.max_queue_size:
@@ -130,7 +164,7 @@ class AdmissionController:
         if gpu_memory_total_mb > 0:
             mem_utilization = gpu_memory_used_mb / gpu_memory_total_mb
             hard_limit = getattr(self.config, "hard_memory_limit_ratio", 0.94)
-            if mem_utilization >= hard_limit:
+            if mem_utilization >= hard_limit and memory_grew:
                 self.total_rejected_overload += 1
                 return AdmissionResult(
                     status=AdmissionStatus.REJECTED_OVERLOAD,
@@ -224,7 +258,7 @@ class AdmissionController:
         if gpu_memory_total_mb > 0:
             mem_utilization = gpu_memory_used_mb / gpu_memory_total_mb
             soft_limit = getattr(self.config, "soft_memory_limit_ratio", 0.88)
-            if mem_utilization >= soft_limit and request.priority != RequestPriority.HIGH:
+            if mem_utilization >= soft_limit and memory_grew and request.priority != RequestPriority.HIGH:
                 self.total_rejected_overload += 1
                 return AdmissionResult(
                     status=AdmissionStatus.REJECTED_OVERLOAD,
@@ -253,6 +287,7 @@ class AdmissionController:
             "total_rejected_overload": self.total_rejected_overload,
             "total_rejected_sla": self.total_rejected_sla,
             "total_burst_shed": self.total_burst_shed,
+            "total_dropped_waiting": self.total_dropped_waiting,
             "ema_service_time_seconds": round(self._ema_service_time, 4),
             "ema_token_time_seconds": round(self._ema_token_time, 5),
         }

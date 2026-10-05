@@ -85,3 +85,87 @@ async def test_dynamic_policy_streaming():
     assert any(c.is_finished for c in chunks)
 
     await policy.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_dynamic_policy_admits_when_admission_check_breaks():
+    config = ServerConfig(initial_concurrency=2, min_concurrency=1, max_concurrency=4, target_sla_ms=5000.0)
+    policy = DynamicBatchPolicy(backend=MockBackend(tokens_per_second=300.0, simulated_ttft_seconds=0.01), config=config)
+    await policy.initialize()
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("estimator failure")
+
+    policy.admission_controller.evaluate = broken
+    res = await policy.schedule(InferenceRequest(prompt="hello", max_tokens=8))
+    assert res.tokens_generated > 0
+    await policy.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_dynamic_policy_keeps_serving_when_controller_breaks():
+    config = ServerConfig(initial_concurrency=2, min_concurrency=1, max_concurrency=4, target_sla_ms=5000.0)
+    policy = DynamicBatchPolicy(backend=MockBackend(tokens_per_second=300.0, simulated_ttft_seconds=0.01), config=config)
+    await policy.initialize()
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("controller failure")
+
+    policy.adaptive_controller.evaluate_and_tune = broken
+    res = await asyncio.wait_for(policy.schedule(InferenceRequest(prompt="hello", max_tokens=8)), timeout=5)
+    assert res.tokens_generated > 0
+    await policy.shutdown()
+
+
+class _CountingBackend(MockBackend):
+    def pop_token_count(self, request_id):
+        return 77
+
+
+@pytest.mark.asyncio
+async def test_policies_report_the_backend_token_count_not_the_chunk_count():
+    config = ServerConfig(initial_concurrency=2, min_concurrency=1, max_concurrency=4, target_sla_ms=5000.0)
+    for policy_cls in (StaticBatchPolicy, DynamicBatchPolicy):
+        policy = policy_cls(backend=_CountingBackend(tokens_per_second=300.0, simulated_ttft_seconds=0.01), config=config)
+        await policy.initialize()
+        res = await policy.schedule(InferenceRequest(prompt="hello", max_tokens=8))
+        assert res.tokens_generated == 77
+        await policy.shutdown()
+
+
+async def _run_overload(drop):
+    config = ServerConfig(
+        initial_concurrency=2, min_concurrency=2, max_concurrency=2,
+        target_sla_ms=1500.0, max_queue_size=100, drop_hopeless_requests=drop,
+    )
+    backend = MockBackend(tokens_per_second=50.0, simulated_ttft_seconds=0.01)
+    policy = DynamicBatchPolicy(backend=backend, config=config)
+    await policy.initialize()
+    policy.admission_controller._ema_service_time = 0.01
+    policy.admission_controller._ema_token_time = 0.001
+    requests = [InferenceRequest(prompt=f"p{i}", max_tokens=20) for i in range(30)]
+    results = await asyncio.gather(*(policy.schedule(r) for r in requests), return_exceptions=True)
+    await policy.shutdown()
+    return policy, results
+
+
+@pytest.mark.asyncio
+async def test_hopeless_queued_requests_are_declined():
+    from scheduler_engine.policy import AdmissionRejectedException
+    from scheduler_engine.types import AdmissionStatus
+
+    policy, results = await _run_overload(drop=True)
+    declined = [r for r in results if isinstance(r, AdmissionRejectedException)]
+    served = [r for r in results if not isinstance(r, Exception)]
+    assert declined and served
+    assert all(d.status == AdmissionStatus.REJECTED_SLA_IMPOSSIBLE for d in declined)
+    assert "predicted latency" in declined[0].reason.lower()
+    assert len(declined) + len(served) == 30
+    assert policy.admission_controller.total_dropped_waiting == len(declined)
+
+
+@pytest.mark.asyncio
+async def test_hopeless_requests_run_when_dropping_is_off():
+    policy, results = await _run_overload(drop=False)
+    assert all(not isinstance(r, Exception) for r in results)
+    assert policy.admission_controller.total_dropped_waiting == 0

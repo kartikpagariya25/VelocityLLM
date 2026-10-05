@@ -245,13 +245,15 @@ pip install -r requirements.txt
 ### 6. Hugging Face Authentication & Model Download
 
 ```bash
-pip install -U huggingface_hub
+pip install "huggingface-hub>=1.5.0,<2.0"
 hf auth login
 mkdir -p models
 hf download meta-llama/Llama-3.2-1B-Instruct \
   --local-dir models/llama-3.2-1b \
   --exclude "original/*"
 ```
+
+> Keep `huggingface-hub` below 2.0 (the pin above): `transformers`, which vLLM imports, rejects newer versions and the engine fails to start. Quantized models such as `Qwen/Qwen2.5-3B-Instruct-AWQ` download the same way and need no code changes.
 
 > Gated model -- request access on its [model page](https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct) first. To skip waiting, substitute a non-gated equivalent like `Qwen/Qwen2.5-1.5B-Instruct` -- the scheduler is model-agnostic.
 

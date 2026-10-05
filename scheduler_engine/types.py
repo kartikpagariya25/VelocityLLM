@@ -248,12 +248,13 @@ class ServerConfig:
     max_concurrency: int = 32
     initial_concurrency: int = 8
     target_sla_ms: float = 3000.0  # 3.0s default target
-    max_queue_size: int = 100
+    max_queue_size: int = 256
     aging_factor: float = 0.25     # Priority promotion rate per second of waiting
     gpu_sample_interval: float = 0.2
 
     # Phase 3 Robustness additions
     enable_structured_logging: bool = False
+    drop_hopeless_requests: bool = True  # decline queued requests that can no longer meet their SLA
 
     # Phase A - API Key Authentication (optional; None disables auth entirely)
     api_key: Optional[str] = None

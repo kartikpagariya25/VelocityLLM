@@ -6,7 +6,7 @@ concurrency ceiling based on live GPU memory headroom, utilization, and queue de
 
 import logging
 import time
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 from scheduler_engine.types import ServerConfig
 
@@ -33,7 +33,8 @@ class AdaptiveBatchController:
         # AIMD tuning parameters
         self.increase_step = 1
         self.decrease_factor = 0.75
-        self.cooldown_seconds = 0.5
+        self.cooldown_seconds = 0.25
+        self._increase_streak = 0
         self._last_adjustment_time = time.time()
         self._emergency_cooldown_until = 0.0
 
@@ -70,6 +71,8 @@ class AdaptiveBatchController:
         queue_depth: int,
         active_requests: int,
         recent_sla_breach: bool = False,
+        service_headroom: bool = True,
+        gpu_memory_baseline_mb: Optional[int] = None,
     ) -> int:
         """
         Evaluate current metrics and return updated concurrency limit.
@@ -83,6 +86,9 @@ class AdaptiveBatchController:
             if gpu_memory_total_mb > 0
             else 0.5
         )
+        if gpu_memory_baseline_mb is not None and gpu_memory_total_mb > 0:
+            if gpu_memory_used_mb - gpu_memory_baseline_mb < 0.03 * gpu_memory_total_mb:
+                mem_ratio = min(mem_ratio, self.soft_memory_limit_ratio - 0.01)
 
         old_limit = self.current_concurrency
         reason = ""
@@ -97,21 +103,25 @@ class AdaptiveBatchController:
                 f"Severe backpressure (Memory: {mem_ratio*100:.1f}%, SLA breach: {recent_sla_breach})"
             )
             self.current_concurrency = new_limit
+            self._increase_streak = 0
 
         # Condition 2: Moderate Memory Pressure -> Cautious Decrement
         elif mem_ratio >= self.soft_memory_limit_ratio:
             new_limit = max(self.min_concurrency, self.current_concurrency - 1)
             reason = f"Memory soft limit reached ({mem_ratio*100:.1f}%)"
             self.current_concurrency = new_limit
+            self._increase_streak = 0
 
-        # Condition 3: GPU Headroom available + Work waiting in queue -> Additive Increase
+        # Condition 3: Memory and latency headroom + work waiting -> accelerating increase (1, 2, 4, ...)
         elif (
             queue_depth > 0
             and active_requests >= self.current_concurrency
             and mem_ratio < self.soft_memory_limit_ratio
-            and gpu_util_percent < 95.0
+            and service_headroom
         ):
-            new_limit = min(self.max_concurrency, self.current_concurrency + self.increase_step)
+            step = min(self.increase_step * (2 ** self._increase_streak), max(1, self.current_concurrency // 2))
+            new_limit = min(self.max_concurrency, self.current_concurrency + step)
+            self._increase_streak = min(self._increase_streak + 1, 4)
             reason = (
                 f"Queue pending ({queue_depth}) with GPU headroom (Util: {gpu_util_percent}%, Mem: {mem_ratio*100:.1f}%)"
             )
@@ -122,6 +132,9 @@ class AdaptiveBatchController:
             if now - self._last_adjustment_time > 3.0:
                 self.current_concurrency = max(self.config.initial_concurrency, self.current_concurrency - 1)
                 reason = "Idle cooldown back towards baseline concurrency"
+
+        if self.current_concurrency <= old_limit:
+            self._increase_streak = 0
 
         if self.current_concurrency != old_limit:
             self._last_adjustment_time = now

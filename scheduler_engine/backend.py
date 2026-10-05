@@ -30,6 +30,10 @@ class GPUOutOfMemoryError(RuntimeError):
 class InferenceBackend(ABC):
     """Abstract interface for LLM inference execution backends."""
 
+    def pop_token_count(self, request_id: str) -> Optional[int]:
+        """Exact number of tokens generated for a finished request, or None when the backend streams one chunk per token."""
+        return None
+
     @abstractmethod
     async def initialize(self) -> None:
         """Perform initialization (e.g. engine warmup or model loading)."""
@@ -94,6 +98,7 @@ class VLLMBackend(InferenceBackend):
         self.engine = None
         self._sampling_params_class = None
         self._telemetry_cache = (0, 0, 8192)
+        self._token_counts: Dict[str, int] = {}
         self._telemetry_interval = getattr(config, "gpu_sample_interval", 0.2)
         self._telemetry_stop = threading.Event()
         self._telemetry_thread = threading.Thread(target=self._telemetry_loop, daemon=True)
@@ -119,8 +124,10 @@ class VLLMBackend(InferenceBackend):
                     parts = [p.strip() for p in result.stdout.strip().split(",")]
                     if len(parts) >= 3:
                         self._telemetry_cache = (int(parts[0]), int(parts[1]), int(parts[2]))
-            except Exception:
-                pass
+            except Exception as err:
+                if not getattr(self, "_telemetry_warned", False):
+                    self._telemetry_warned = True
+                    logger.warning("GPU telemetry unavailable (%s); memory-based limits are disabled.", err)
             self._telemetry_stop.wait(self._telemetry_interval)
 
     async def initialize(self) -> None:
@@ -163,9 +170,11 @@ class VLLMBackend(InferenceBackend):
         )
 
         previous_text = ""
+        produced = 0
         try:
             async for output in self.engine.generate(prompt, sampling_params, request_id):
                 if output.outputs:
+                    produced = len(getattr(output.outputs[0], "token_ids", None) or ())
                     current_text = output.outputs[0].text
                     new_delta = current_text[len(previous_text):]
                     previous_text = current_text
@@ -177,6 +186,14 @@ class VLLMBackend(InferenceBackend):
                 self.handle_oom()
                 raise GPUOutOfMemoryError(f"CUDA Out of Memory in vLLM engine: {e}") from e
             raise
+        finally:
+            if produced:
+                if len(self._token_counts) > 2000:
+                    self._token_counts.clear()
+                self._token_counts[request_id] = produced
+
+    def pop_token_count(self, request_id: str) -> Optional[int]:
+        return self._token_counts.pop(request_id, None)
 
     def handle_oom(self) -> None:
         """Purge GPU cache upon CUDA OOM event."""

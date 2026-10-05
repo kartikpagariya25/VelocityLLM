@@ -560,6 +560,12 @@ def main():
         help="Maximum concurrency ceiling for adaptive controller",
     )
     parser.add_argument(
+        "--initial-concurrency",
+        type=int,
+        default=8,
+        help="Starting concurrency; the fixed limit for the static policy (default: 8)",
+    )
+    parser.add_argument(
         "--max-model-len",
         type=int,
         default=4096,
@@ -597,6 +603,7 @@ def main():
         port=args.port,
         target_sla_ms=args.sla_ms,
         max_concurrency=args.max_concurrency,
+        initial_concurrency=args.initial_concurrency,
         max_model_len=args.max_model_len,
         burst_shed_queue_ratio=args.burst_shed_ratio,
         enable_structured_logging=args.structured_logs,
