@@ -21,6 +21,7 @@ export function newStore(cfg, steps, source) {
     smart: emptyPolicy(),
     levels: { static: {}, dynamic: {}, smart: {} },
     runId: null,
+    deviceResults: {},
   }
 }
 
@@ -58,6 +59,8 @@ export function apply(s, { event, data }) {
     p.reqs.push(data)
   } else if (event === 'level_result' && p) {
     s.levels[data.policy][data.level] = data
+  } else if (event === 'device_result') {
+    if (data.final || !s.deviceResults[data.policy]?.[data.device]?.final) (s.deviceResults[data.policy] ??= {})[data.device] = data
   } else if (event === 'result' && p) {
     p.result = data
   } else if (event === 'done') {

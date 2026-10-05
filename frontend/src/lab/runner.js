@@ -207,3 +207,13 @@ export function startSimSweep(cfg, levels, emit) {
     burst: () => {},
   }
 }
+
+export const stepsForPolicies = (policies) => [
+  ['preflight', 'Pre-flight'],
+  ...policies.flatMap((p) => {
+    const name = p[0].toUpperCase() + p.slice(1)
+    return [[`${p}_start`, `${name} start`], [`${p}_warmup`, `${name} warm-up`], [`${p}_load`, `${name} load`]]
+  }),
+  ['scoring', 'Scoring'],
+  ['done', 'Done'],
+]

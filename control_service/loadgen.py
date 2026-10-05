@@ -78,6 +78,7 @@ async def run_load(base_url, plan, timeout_s, on_request=None, id_prefix="r"):
             "status": "error", "http_status": None, "tokens": 0, "priority": "NORMAL",
             "reject_reason": None, "retry_after_s": None, "error": None, "is_long": bool(item.get("is_long")),
             "queue_s": None, "exec_s": None, "image_tokens": int(item.get("image_tokens") or 0),
+            "device": item.get("device"),
         }
         try:
             payload = {"prompt": item["prompt"], "max_tokens": item["max_tokens"], "temperature": 0.0, "request_id": rid}
@@ -138,7 +139,7 @@ def write_csv(path: Path, rows):
     import csv
 
     fields = ["index", "request_id", "arrival_s", "start_s", "end_s", "status", "http_status", "tokens",
-              "reject_reason", "retry_after_s", "queue_s", "exec_s", "is_long", "image_tokens", "error"]
+              "reject_reason", "retry_after_s", "queue_s", "exec_s", "is_long", "image_tokens", "device", "error"]
     with open(path, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
         w.writeheader()

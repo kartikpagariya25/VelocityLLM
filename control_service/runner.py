@@ -7,6 +7,7 @@ from .config import MAX_USERS
 from .environment import capture
 from .engine import Engine, EngineError, free_port
 from .gpu import gpu_info
+from .live import live_plan, rows_by_device
 from .loadgen import build_plan, run_load, write_csv
 from .logparse import classify, is_noise
 from .models import describe, discover
@@ -179,13 +180,17 @@ class Orchestrator:
 
         levels = cfg.get("levels") or [cfg["requests"]]
         primary = max(levels)
-        collected = {p: {n: [] for n in levels} for p in POLICIES}
+        policies = tuple(cfg.get("policies") or POLICIES)
+        collected = {p: {n: [] for n in levels} for p in policies}
+        per_device = {p: {} for p in policies}
         for rnd in range(1, cfg["repeats"] + 1):
-            order = POLICIES if rnd % 2 else POLICIES[::-1]
+            order = policies if rnd % 2 else policies[::-1]
             for policy in order:
                 legs = await self._leg(run, cfg, policy, rnd, model_path, mock, sla_s, levels)
                 for n, (rows, wall) in legs.items():
                     collected[policy][n].append(score(rows, sla_s, wall))
+                    for device, device_rows in rows_by_device(rows).items():
+                        per_device[policy].setdefault(device, []).append(score(device_rows, sla_s, wall))
                     name = f"raw_{policy}_r{rnd}.csv" if len(levels) == 1 else f"raw_{policy}_n{n}_r{rnd}.csv"
                     try:
                         write_csv(run.dir / name, rows)
@@ -193,22 +198,27 @@ class Orchestrator:
                         await self.log(run, policy, f"Could not save raw CSV: {e}", "system", "WARNING")
 
         await self.phase(run, "scoring")
-        per_level = {p: {n: median_of(collected[p][n]) for n in levels} for p in POLICIES}
+        per_level = {p: {n: median_of(collected[p][n]) for n in levels} for p in policies}
         if len(levels) > 1 and cfg["repeats"] > 1:
-            for p in POLICIES:
+            for p in policies:
                 for n in levels:
                     await run.emit("level_result", {"policy": p, "level": n, "final": True, **per_level[p][n]})
-        results = {p: per_level[p][primary] for p in POLICIES}
-        for p in POLICIES:
+        results = {p: per_level[p][primary] for p in policies}
+        devices_final = {p: {d: median_of(v) for d, v in per_device[p].items()} for p in policies}
+        for p in policies:
             await run.emit("result", {"policy": p, "level": primary, "warnings": diagnose(results[p]), **results[p]})
+            for d, v in devices_final[p].items():
+                await run.emit("device_result", {"policy": p, "device": d, "final": True, **v})
         payload = {
             "config": cfg, "status": "completed", "created": run.created, "gpu": report["gpu"],
             "model_path": model_path, "levels": levels, "results": results,
-            "warnings": {p: diagnose(results[p]) for p in POLICIES},
-            "per_level": {p: {str(n): v for n, v in per_level[p].items()} for p in POLICIES},
-            "per_repeat": {p: {str(n): v for n, v in collected[p].items()} for p in POLICIES},
+            "warnings": {p: diagnose(results[p]) for p in policies},
+            "per_level": {p: {str(n): v for n, v in per_level[p].items()} for p in policies},
+            "per_repeat": {p: {str(n): v for n, v in collected[p].items()} for p in policies},
             "environment": env,
         }
+        if cfg.get("live"):
+            payload["per_device"] = devices_final
         run.results = payload
         try:
             (run.dir / "results.json").write_text(json.dumps(payload, indent=2))
@@ -261,7 +271,10 @@ class Orchestrator:
             for n in levels:
                 await self._settle(s.settle_seconds)
                 base = await engine.stats() or {}
-                plan = build_plan(cfg["scenario"], n, cfg["seed"] + rnd, cfg["prompt_preset"], cfg["prompt_text"], vision=vision, image_mix=cfg.get("image_mix", "mixed"))
+                if cfg.get("live"):
+                    plan = live_plan(cfg["live"]["devices"], cfg["seed"] + rnd, vision, cfg.get("image_mix", "mixed"))
+                else:
+                    plan = build_plan(cfg["scenario"], n, cfg["seed"] + rnd, cfg["prompt_preset"], cfg["prompt_text"], vision=vision, image_mix=cfg.get("image_mix", "mixed"))
                 await run.emit("phase", {"phase": f"{policy}_load", "policy": policy, "repeat": rnd, "level": n, "ts": time.time()})
                 if len(levels) > 1:
                     await self.log(run, policy, f"Load level: {n} users")
@@ -274,7 +287,7 @@ class Orchestrator:
                         "start_s": None if row["start_s"] is None else round(row["start_s"], 3),
                         "end_s": round(row["end_s"], 3), "status": row["status"], "http_status": row["http_status"],
                         "tokens": row["tokens"], "image_tokens": row["image_tokens"], "priority": row["priority"], "reject_reason": row["reject_reason"],
-                        "retry_after_s": row["retry_after_s"], "error": row["error"],
+                        "retry_after_s": row["retry_after_s"], "error": row["error"], "device": row.get("device"),
                     })
 
                 poller = asyncio.create_task(self._poll(run, engine, policy, base, load_start))
@@ -297,6 +310,9 @@ class Orchestrator:
                 for note in notes:
                     await self.log(run, policy, f"Level {n}: {note}", "error", "WARNING")
                 await run.emit("level_result", {"policy": policy, "level": n, "repeat": rnd, "warnings": notes, **result})
+                if cfg.get("live"):
+                    for device, device_rows in rows_by_device(rows).items():
+                        await run.emit("device_result", {"policy": policy, "repeat": rnd, "device": device, **score(device_rows, sla_s, wall)})
                 out[n] = (rows, wall)
             return out
         finally:

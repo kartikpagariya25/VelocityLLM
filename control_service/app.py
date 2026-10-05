@@ -15,6 +15,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
 from .config import MAX_USERS, Settings
+from .gpu import gpu_info
+from .live import MAX_PER_DEVICE, DeviceSpec, LiveConfig, LiveError, LiveHub, choose_model, lan_addresses
 from .loadgen import SCENARIOS
 from .vision_load import IMAGE_MIXES
 from .models import describe, discover
@@ -25,6 +27,19 @@ from .runs import RunStore
 VERSION = "1.0.0"
 ROWS = ("p50_s", "p95_s", "p99_s", "tokens_per_s", "served", "offered", "rejected", "errors",
         "within_sla_served", "within_sla_offered", "zero_token_share")
+
+
+class JoinRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=24)
+
+
+class SpecRequest(BaseModel):
+    device_id: str = Field(min_length=1, max_length=64)
+    spec: DeviceSpec
+
+
+class DeviceRef(BaseModel):
+    device_id: str = Field(min_length=1, max_length=64)
 
 
 class RunRequest(BaseModel):
@@ -73,6 +88,7 @@ class SiteFiles(StaticFiles):
 def create_app(settings: Settings) -> FastAPI:
     store = RunStore(settings.results_dir)
     orch = Orchestrator(settings, store)
+    hub = LiveHub()
 
     @asynccontextmanager
     async def lifespan(_):
@@ -81,6 +97,8 @@ def create_app(settings: Settings) -> FastAPI:
         except OSError:
             pass
         yield
+        if hub.timer and not hub.timer.done():
+            hub.timer.cancel()
         run = store.runs.get(store.active) if store.active else None
         if run and run.task:
             run.task.cancel()
@@ -282,6 +300,181 @@ def create_app(settings: Settings) -> FastAPI:
         except LookupError as e:
             raise HTTPException(404, str(e))
         return {"run_id": run.id}
+
+    LIVE_COLUMNS = ("offered", "served", "rejected", "errors", "p50_s", "p95_s", "p99_s", "tokens", "tokens_per_s", "within_sla_served")
+
+    async def launch_live():
+        if orch.busy():
+            raise LiveError(409, "The engine is busy with a run, try again when it finishes")
+        devices = hub.ready_devices()
+        if not devices:
+            raise LiveError(422, "No device has sent its traffic yet")
+        total = hub.total_requests(devices)
+        if total > MAX_USERS:
+            raise LiveError(422, f"The devices ask for {total} requests together, the limit is {MAX_USERS}")
+        conf = hub.config
+        mock = settings.mock
+        report = await run_checks(settings, None, mock)
+        usable = [m for m in report["models"] if m["available"]]
+        model = choose_model(usable, conf.model)
+        if not model:
+            raise LiveError(422, "No usable model was found on this machine")
+        blocking = [c for c in report["checks"] if not c["ok"] and c["level"] == "error"]
+        if blocking:
+            raise LiveError(412, "Pre-flight failed: " + "; ".join(f"{c['label']}: {c['detail']}" for c in blocking))
+        cfg = {
+            "model": model, "scenario": "live", "sla_ms": conf.sla_ms, "requests": total, "repeats": conf.repeats,
+            "mode": "sequential", "prompt_preset": "medium", "prompt_text": None, "image_mix": "mixed", "seed": conf.seed,
+            "levels": None, "mock": mock, "policies": list(conf.policies),
+            "live": {"devices": [{"name": d.name, "spec": dict(d.spec)} for d in devices]},
+        }
+        try:
+            run = await orch.start(cfg)
+        except RuntimeError as e:
+            raise LiveError(409, str(e))
+        hub.last_run_id = run.id
+        hub.last_error = None
+        hub.reset()
+        return run, [d["name"] for d in cfg["live"]["devices"]], total
+
+    def raise_http(e: LiveError):
+        raise HTTPException(e.status, str(e))
+
+    async def auto_start(delay):
+        try:
+            await asyncio.sleep(delay)
+            hub.fire_at = None
+            await launch_live()
+        except asyncio.CancelledError:
+            raise
+        except LiveError as e:
+            hub.last_error = str(e)
+        except Exception as e:
+            hub.last_error = f"{type(e).__name__}: {e}"
+        finally:
+            hub.fire_at = None
+
+    def arm():
+        if hub.timer and not hub.timer.done():
+            hub.timer.cancel()
+        delay = hub.config.window_s
+        hub.fire_at = time.time() + delay
+        hub.last_error = None
+        hub.timer = asyncio.create_task(auto_start(delay))
+
+    @app.get("/api/live/state")
+    async def live_state(device_id: Optional[str] = None):
+        me = hub.get(device_id) if device_id else None
+        active = store.runs.get(store.active) if store.active else None
+        last = store.runs.get(hub.last_run_id) if hub.last_run_id else None
+        current = active or last
+        models = [m for m in (describe(n, p, settings.mock) for n, p in discover(settings).items()) if m["available"]]
+        gpu = None if settings.mock else await gpu_info(1.5)
+        return {
+            "devices": hub.snapshot(),
+            "me": me.public() if me else None,
+            "joined": bool(me) if device_id else None,
+            "models": models,
+            "model": choose_model(models, hub.config.model),
+            "gpu": (gpu or {}).get("name") or ("Mock engine" if settings.mock else "PC GPU"),
+            "config": hub.config.model_dump(),
+            "countdown_s": hub.countdown(),
+            "error": hub.last_error,
+            "run": {"id": current.id, "status": current.status, "config": {k: current.config.get(k) for k in ("model", "sla_ms", "policies", "repeats", "requests")}} if current and current.config.get("live") else None,
+            "busy": bool(active),
+            "hosts": lan_addresses(),
+            "port": settings.port,
+            "mock": settings.mock,
+            "limits": {"per_device": MAX_PER_DEVICE, "total": MAX_USERS},
+        }
+
+    @app.post("/api/live/join")
+    async def live_join(req: JoinRequest):
+        try:
+            device = hub.join(req.name)
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+        except OverflowError as e:
+            raise HTTPException(409, str(e))
+        return {"device_id": device.id, "name": device.name}
+
+    def store_spec(req: SpecRequest):
+        device = hub.get(req.device_id)
+        if not device:
+            raise HTTPException(404, "This device is not part of the session, join again")
+        if store.active:
+            raise HTTPException(409, "The engine is busy with a run, try again when it finishes")
+        if req.spec.prompt_preset == "custom" and not (req.spec.prompt_text or "").strip():
+            raise HTTPException(422, "A custom prompt needs text")
+        device.spec = req.spec.model_dump()
+        return device
+
+    @app.post("/api/live/spec")
+    async def live_spec(req: SpecRequest):
+        return store_spec(req).public()
+
+    @app.post("/api/live/send")
+    async def live_send(req: SpecRequest):
+        device = store_spec(req)
+        armed = hub.config.auto_start
+        if armed:
+            arm()
+        return {"device": device.public(), "armed": armed, "window_s": hub.config.window_s}
+
+    @app.post("/api/live/config")
+    async def live_config(conf: LiveConfig):
+        if conf.model and conf.model not in {n for n in discover(settings)}:
+            raise HTTPException(422, f"Model '{conf.model}' is not available")
+        hub.config = conf
+        if not conf.auto_start and hub.timer and not hub.timer.done():
+            hub.timer.cancel()
+            hub.fire_at = None
+        return conf.model_dump()
+
+    @app.post("/api/live/leave")
+    async def live_leave(req: DeviceRef):
+        hub.leave(req.device_id)
+        return {"ok": True}
+
+    @app.post("/api/live/reset")
+    async def live_reset():
+        if store.active:
+            raise HTTPException(409, "A run is in progress")
+        if hub.timer and not hub.timer.done():
+            hub.timer.cancel()
+        hub.fire_at = None
+        hub.reset()
+        return {"ok": True}
+
+    @app.post("/api/live/start", status_code=202)
+    async def live_start():
+        if hub.timer and not hub.timer.done():
+            hub.timer.cancel()
+            hub.fire_at = None
+        try:
+            run, names, total = await launch_live()
+        except LiveError as e:
+            raise_http(e)
+        return {"run_id": run.id, "devices": names, "total": total}
+
+    @app.get("/api/live/runs")
+    async def live_runs():
+        runs = sorted((r for r in store.runs.values() if r.config.get("live")), key=lambda r: r.created, reverse=True)
+        return [r.summary() for r in runs]
+
+    @app.get("/api/live/runs/{run_id}/report.csv")
+    async def live_report(run_id: str):
+        run = get_run(run_id)
+        if not run.results or not run.config.get("live"):
+            raise HTTPException(409, "This is not a finished live run")
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(["policy", "device", *LIVE_COLUMNS])
+        for pol, overall in run.results["results"].items():
+            w.writerow([pol, "ALL", *[overall.get(k, "") for k in LIVE_COLUMNS]])
+            for dev, res in (run.results.get("per_device", {}).get(pol) or {}).items():
+                w.writerow([pol, dev, *[res.get(k, "") for k in LIVE_COLUMNS]])
+        return Response(buf.getvalue(), media_type="text/csv", headers={"Content-Disposition": f'attachment; filename="{run.id}-live.csv"'})
 
     if settings.frontend_dir.is_dir():
         app.mount("/", SiteFiles(directory=settings.frontend_dir, html=True), name="site")
