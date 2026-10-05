@@ -88,10 +88,13 @@ export default function Phone() {
   const run = state?.run
   const busy = state?.busy
   const countdown = state?.countdown_s
+  const mine = state?.me?.ready
   let status = ''
-  if (busy) status = 'The engine is busy. Watch the PC dashboard.'
-  else if (countdown != null) status = `Starting in ${Math.ceil(countdown)} s. Other phones can still join.`
-  else if (sent && !sent.armed) status = 'Sent. Waiting for the host to press Start.'
+  if (countdown != null) status = `Starting in ${Math.ceil(countdown)} s. Other phones can still join.`
+  else if (state?.waiting) status = 'Your request is queued. It starts right after the current run.'
+  else if (busy && sent) status = 'Running now. Watch the PC dashboard. You can send again to queue another run.'
+  else if (busy) status = 'A run is in progress. Send now to queue yours for the next run.'
+  else if (sent && !sent.armed && mine) status = 'Sent. Waiting for the host to press Start.'
   else if (sent && run?.status === 'completed') status = 'Done. Results are on the PC dashboard.'
   else if (state?.error) status = state.error
 
@@ -152,8 +155,8 @@ export default function Phone() {
           )}
         </div>
 
-        <button className="lv-go" onClick={send} disabled={sending || busy}>
-          {sending ? 'Sending...' : 'Send prompts'}
+        <button className="lv-go" onClick={send} disabled={sending}>
+          {sending ? 'Sending...' : busy ? 'Queue prompts' : 'Send prompts'}
         </button>
         {error && <p className="lv-err">{error}</p>}
         {status && <p className="lv-status">{status}</p>}

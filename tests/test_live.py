@@ -101,7 +101,7 @@ def test_live_run_end_to_end_runs_static_then_dynamic(client):
     assert all(d["ready"] is False for d in client.get("/api/live/state").json()["devices"])
 
 
-def test_send_auto_starts_after_window_and_late_phone_joins_same_run(client):
+def test_send_auto_starts_after_window_and_busy_send_queues_next_run(client):
     assert client.post("/api/live/config", json={"window_s": 1.0}).status_code == 200
     a = client.post("/api/live/join", json={"name": "Kartik"}).json()["device_id"]
     b = client.post("/api/live/join", json={"name": "Aditya"}).json()["device_id"]
@@ -117,12 +117,22 @@ def test_send_auto_starts_after_window_and_late_phone_joins_same_run(client):
             break
         time.sleep(0.25)
     assert run_id and client.get("/api/live/state").json()["run"]["config"]["requests"] == 8
-    assert client.post("/api/live/send", json={"device_id": a, "spec": spec}).status_code == 409
-    for _ in range(120):
-        if client.get(f"/api/runs/{run_id}").json()["status"] in ("completed", "failed"):
+    queued = client.post("/api/live/send", json={"device_id": a, "spec": spec})
+    assert queued.status_code == 200 and queued.json()["queued"] is True
+    second = None
+    for _ in range(240):
+        current = client.get("/api/live/state").json()["run"]
+        if current and current["id"] != run_id:
+            second = current["id"]
             break
         time.sleep(0.5)
-    assert client.get(f"/api/runs/{run_id}").json()["status"] == "completed"
+    assert second and client.get(f"/api/runs/{run_id}").json()["status"] == "completed"
+    assert client.get("/api/live/state").json()["run"]["config"]["requests"] == 4
+    for _ in range(120):
+        if client.get(f"/api/runs/{second}").json()["status"] in ("completed", "failed"):
+            break
+        time.sleep(0.5)
+    assert client.get(f"/api/runs/{second}").json()["status"] == "completed"
 
 
 def test_manual_mode_does_not_auto_start(client):

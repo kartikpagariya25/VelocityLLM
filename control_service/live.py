@@ -72,6 +72,7 @@ class LiveHub:
         self.timer = None
         self.fire_at = None
         self.last_error = None
+        self.waiting = False
 
     def countdown(self):
         if self.fire_at is None:

@@ -343,6 +343,14 @@ def create_app(settings: Settings) -> FastAPI:
     async def auto_start(delay):
         try:
             await asyncio.sleep(delay)
+            if orch.busy():
+                hub.fire_at = None
+                hub.waiting = True
+                while orch.busy():
+                    await asyncio.sleep(0.5)
+                hub.waiting = False
+                hub.fire_at = time.time() + hub.config.window_s
+                await asyncio.sleep(hub.config.window_s)
             hub.fire_at = None
             await launch_live()
         except asyncio.CancelledError:
@@ -353,12 +361,13 @@ def create_app(settings: Settings) -> FastAPI:
             hub.last_error = f"{type(e).__name__}: {e}"
         finally:
             hub.fire_at = None
+            hub.waiting = False
 
     def arm():
         if hub.timer and not hub.timer.done():
             hub.timer.cancel()
         delay = hub.config.window_s
-        hub.fire_at = time.time() + delay
+        hub.fire_at = None if orch.busy() else time.time() + delay
         hub.last_error = None
         hub.timer = asyncio.create_task(auto_start(delay))
 
@@ -379,6 +388,7 @@ def create_app(settings: Settings) -> FastAPI:
             "gpu": (gpu or {}).get("name") or ("Mock engine" if settings.mock else "PC GPU"),
             "config": hub.config.model_dump(),
             "countdown_s": hub.countdown(),
+            "waiting": hub.waiting,
             "error": hub.last_error,
             "run": {"id": current.id, "status": current.status, "config": {k: current.config.get(k) for k in ("model", "sla_ms", "policies", "repeats", "requests")}} if current and current.config.get("live") else None,
             "busy": bool(active),
@@ -402,8 +412,6 @@ def create_app(settings: Settings) -> FastAPI:
         device = hub.get(req.device_id)
         if not device:
             raise HTTPException(404, "This device is not part of the session, join again")
-        if store.active:
-            raise HTTPException(409, "The engine is busy with a run, try again when it finishes")
         if req.spec.prompt_preset == "custom" and not (req.spec.prompt_text or "").strip():
             raise HTTPException(422, "A custom prompt needs text")
         device.spec = req.spec.model_dump()
@@ -419,7 +427,7 @@ def create_app(settings: Settings) -> FastAPI:
         armed = hub.config.auto_start
         if armed:
             arm()
-        return {"device": device.public(), "armed": armed, "window_s": hub.config.window_s}
+        return {"device": device.public(), "armed": armed, "window_s": hub.config.window_s, "queued": orch.busy()}
 
     @app.post("/api/live/config")
     async def live_config(conf: LiveConfig):
