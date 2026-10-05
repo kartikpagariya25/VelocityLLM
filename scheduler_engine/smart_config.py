@@ -21,6 +21,9 @@ class SmartConfig:
     model_weights_mb: int = 2600          # approx VRAM taken by weights + activations
     kv_safe_fraction: float = 0.90        # fraction of KV capacity we treat as "safe"
     kv_capacity_tokens_override: int = 0  # >0 forces KV capacity (tokens); handy for tests/demos
+    kv_auto: bool = True                  # derive kv_bytes_per_token / weights from the model's config.json and read real vLLM KV capacity
+    predictive_ramp: bool = True          # jump straight to the predicted safe capacity instead of ramping via AIMD
+    ramp_pressure_max: float = 0.80       # predictive ramp only while future KV pressure stays below this
 
     # ---- Feature 6: token-length buckets -----------------------------------
     bucket_short_max: int = 256           # SHORT  <= 256 estimated tokens

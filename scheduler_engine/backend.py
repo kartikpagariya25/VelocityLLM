@@ -35,6 +35,9 @@ class InferenceBackend(ABC):
         """Exact number of tokens generated for a finished request, or None when the backend streams one chunk per token."""
         return None
 
+    def kv_capacity_tokens(self) -> Optional[int]:
+        return None
+
     @abstractmethod
     async def initialize(self) -> None:
         """Perform initialization (e.g. engine warmup or model loading)."""
@@ -214,6 +217,20 @@ class VLLMBackend(InferenceBackend):
 
     def pop_token_count(self, request_id: str) -> Optional[int]:
         return self._token_counts.pop(request_id, None)
+
+    def kv_capacity_tokens(self) -> Optional[int]:
+        try:
+            inner = getattr(self.engine, "engine", None)
+            cache = getattr(inner, "cache_config", None)
+            if cache is None:
+                cache = getattr(getattr(inner, "vllm_config", None), "cache_config", None)
+            blocks = getattr(cache, "num_gpu_blocks", None)
+            size = getattr(cache, "block_size", None)
+            if blocks and size:
+                return int(blocks) * int(size)
+        except Exception as err:
+            logger.debug("Could not read vLLM KV capacity: %s", err)
+        return None
 
     def handle_oom(self) -> None:
         """Purge GPU cache upon CUDA OOM event."""
