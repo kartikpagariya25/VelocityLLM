@@ -4,7 +4,7 @@ This package is the installable front door. The implementation lives in the pack
 scheduler_engine (server and policies), control_service (benchmark runner) and load_generator (traffic tools).
 """
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 
 def benchmark(*args, **kwargs):

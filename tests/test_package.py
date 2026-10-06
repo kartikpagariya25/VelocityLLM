@@ -21,9 +21,9 @@ def make_models(root, names):
 
 
 def test_version_and_commands(capsys):
-    assert velocityllm.__version__ == "0.4.0"
+    assert velocityllm.__version__ == "0.4.1"
     assert cli.main(["version"]) == 0
-    assert "0.4.0" in capsys.readouterr().out
+    assert "0.4.1" in capsys.readouterr().out
     assert "bench" in cli.COMMANDS and cli.main(["nope"]) == 2
 
 
@@ -76,3 +76,21 @@ def test_relative_out_dir_is_resolved(tmp_path, monkeypatch):
     rows = velocityllm.benchmark({"alpha": str(tmp_path / "models" / "alpha")}, policies=("dynamic",), requests=4,
                                  repeats=1, settle=0.2, port=free_port(), mock=True, quiet=True, out_dir="rel_out")
     assert rows and (tmp_path / "rel_out" / "summary.json").exists()
+
+
+def test_resolve_models_accepts_names_paths_and_dict(tmp_path):
+    make_models(tmp_path, ["alpha", "beta"])
+    by_names = bench.resolve_models(["alpha"], str(tmp_path))
+    assert list(by_names) == ["alpha"]
+    assert list(bench.resolve_models(None, str(tmp_path))) == ["alpha", "beta"]
+    assert bench.resolve_models([str(tmp_path / "beta")], None) == {"beta": str(tmp_path / "beta")}
+    assert bench.resolve_models({"x": "/p"}, None) == {"x": "/p"}
+    with pytest.raises(SystemExit):
+        bench.resolve_models(["missing"], str(tmp_path))
+
+
+def test_benchmark_with_model_names(tmp_path):
+    make_models(tmp_path / "models", ["alpha", "beta"])
+    rows = velocityllm.benchmark(["alpha"], models_dir=str(tmp_path / "models"), policies=("dynamic",), requests=4,
+                                 repeats=1, settle=0.2, port=free_port(), mock=True, quiet=True, out_dir=str(tmp_path / "o"))
+    assert {r["model"] for r in rows} == {"alpha"}

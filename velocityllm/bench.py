@@ -219,16 +219,30 @@ def score(path, sla_s):
     }
 
 
-def benchmark(models, policies=("static", "dynamic"), scenarios=("flood",), sla_ms=8000.0, repeats=3,
+def resolve_models(models, models_dir):
+    if isinstance(models, dict):
+        return dict(models)
+    if isinstance(models, str):
+        models = [models]
+    names = list(models) if models else None
+    if names and all(os.sep in n or n.startswith(("~", ".")) for n in names):
+        return {Path(n).expanduser().name: str(Path(n).expanduser()) for n in names}
+    return find_models(models_dir or os.path.join(os.getcwd(), "models"), names)
+
+
+def benchmark(models=None, policies=("static", "dynamic"), scenarios=("flood",), sla_ms=8000.0, repeats=3,
               requests=100, seed=42, port=8000, max_model_len=4096, settle=5.0, startup_timeout=600.0,
-              out_dir=None, mock=False, quiet=False, report_only=False):
-    """Run the benchmark and return one dict per (model, scenario, policy) with median p50/p95/p99, tokens/s and on-time share."""
+              out_dir=None, mock=False, quiet=False, report_only=False, models_dir=None):
+    """Run the benchmark and return one dict per (model, scenario, policy) with median p50/p95/p99, tokens/s and on-time share.
+
+    models: {name: path}, a list of model folder names (looked up in models_dir), a list of paths, or None for every model in models_dir.
+    """
     bad = [p for p in policies if p not in KNOWN_POLICIES]
     if bad:
         raise ValueError(f"unknown policy: {', '.join(bad)} (choose from {', '.join(KNOWN_POLICIES)})")
     out = (Path(out_dir).expanduser() if out_dir else Path.cwd() / "velocity_bench" / "latest").resolve()
     out.mkdir(parents=True, exist_ok=True)
-    bench = Bench(dict(models), policies, scenarios, sla_ms, repeats, requests, seed, port, max_model_len,
+    bench = Bench(resolve_models(models, models_dir), policies, scenarios, sla_ms, repeats, requests, seed, port, max_model_len,
                   settle, startup_timeout, out, mock, quiet)
     if not report_only:
         bench.collect()

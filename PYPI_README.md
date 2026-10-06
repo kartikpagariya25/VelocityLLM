@@ -35,7 +35,7 @@ velocityllm bench --mock --models-dir ./models      # no GPU, simulated engine
 import velocityllm
 
 rows = velocityllm.benchmark(
-    {"qwen2.5-1.5b": "/data/qwen2.5-1.5b", "gemma-2-2b": "/data/gemma-2-2b"},
+    ["qwen2.5-1.5b", "gemma-2-2b"], models_dir="/data/models",
     requests=100, repeats=3, sla_ms=8000,
 )
 for r in rows:
