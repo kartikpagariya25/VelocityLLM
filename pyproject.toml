@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "velocityllm"
+dynamic = ["version"]
+description = "SLA-aware dynamic request scheduling for LLM serving on vLLM, with a built-in terminal benchmark"
+readme = "PYPI_README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Kartik Pagariya", email = "kartik.profession@gmail.com" }]
+keywords = ["llm", "inference", "scheduler", "vllm", "sla", "gpu", "benchmark"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = ["fastapi", "uvicorn[standard]", "pydantic>=2", "aiohttp", "pyyaml", "Pillow"]
+
+[project.optional-dependencies]
+gpu = ["vllm"]
+dev = ["pytest", "pytest-asyncio", "httpx", "build", "twine"]
+
+[project.urls]
+Repository = "https://github.com/kartikpagariya25/VelocityLLM"
+
+[project.scripts]
+velocityllm = "velocityllm.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["velocityllm*", "scheduler_engine*", "control_service*", "load_generator*"]
+
+[tool.setuptools.dynamic]
+version = { attr = "velocityllm.__version__" }
+
+[tool.setuptools.package-data]
+control_service = ["web/**/*"]

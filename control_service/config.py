@@ -20,7 +20,7 @@ class Settings:
     request_timeout: float = 300.0
     settle_seconds: float = 5.0
     cors_origins: list = field(default_factory=list)
-    frontend_dir: Path = ROOT / "frontend" / "dist"
+    frontend_dir: Path = ROOT / "frontend" / "dist" if (ROOT / "frontend" / "dist").is_dir() else Path(__file__).resolve().parent / "web"
     api_key: str | None = None
 
 

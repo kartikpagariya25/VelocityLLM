@@ -52,3 +52,9 @@ frontend/build/
 *.mov
 *.avi
 results/runs/
+
+control_service/web/
+build/
+dist/
+velocity_bench/
+velocity_runs/
