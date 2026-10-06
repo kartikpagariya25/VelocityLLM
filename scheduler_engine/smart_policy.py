@@ -487,6 +487,7 @@ class SmartBatchPolicy(DynamicBatchPolicy):
         p = entry.profile
         rid = entry.request.request_id
         conc_at_dispatch = len(self._active_requests) + 1
+        self._active_image_tokens[rid] = entry.request.image_tokens
         self._running[rid] = RunningInfo(
             request_id=rid, prompt_tokens=p.prompt_tokens, max_tokens=p.max_tokens,
             expected_output=p.expected_output_tokens, p90_output=p.p90_output_tokens,
@@ -573,6 +574,7 @@ class SmartBatchPolicy(DynamicBatchPolicy):
             # accounting shared by streaming and non-streaming
             self.total_completed += 1
             self.total_tokens += n
+            self.total_image_tokens += request.image_tokens
             self.latencies.append(total_latency)
             self.queue_times.append(queue_time)
             if len(self.latencies) > 500:
@@ -627,6 +629,7 @@ class SmartBatchPolicy(DynamicBatchPolicy):
                 latency_seconds=round(total_latency, 4), queue_time_seconds=round(queue_time, 4),
                 execution_time_seconds=round(exec_time, 4), tokens_generated=n,
                 tokens_per_second=round(tps, 2), sla_met=sla_met, priority=request.priority.name.lower(),
+                image_tokens=request.image_tokens,
             )
             if sink is not None:
                 sink.put_nowait(GenerationChunk(
@@ -659,6 +662,7 @@ class SmartBatchPolicy(DynamicBatchPolicy):
                 entry.future.set_exception(err)
         finally:
             self._active_requests.pop(rid, None)
+            self._active_image_tokens.pop(rid, None)
             self._running.pop(rid, None)
             if sink is not None:
                 sink.put_nowait(None)
