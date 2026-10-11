@@ -148,6 +148,10 @@ class VLLMBackend(InferenceBackend):
                 max_num_seqs=self.config.max_concurrency,
                 enable_prefix_caching=True,
             )
+            if self.config.chunked_prefill:
+                engine_kwargs["enable_chunked_prefill"] = True
+            if self.config.max_num_batched_tokens:
+                engine_kwargs["max_num_batched_tokens"] = self.config.max_num_batched_tokens
             if self.config.vision:
                 engine_kwargs["limit_mm_per_prompt"] = {"image": 1}
                 engine_kwargs["mm_processor_kwargs"] = {"max_pixels": vision.MAX_PIXELS}
@@ -354,12 +358,20 @@ class MockBackend(InferenceBackend):
 def create_backend(config: ServerConfig) -> InferenceBackend:
     """Factory to create and return the appropriate backend instance."""
     if config.use_mock_backend:
-        return MockBackend(config)
+        return MockBackend(
+            config,
+            tokens_per_second=config.mock_tokens_per_second,
+            contention_exponent=config.mock_contention_exponent,
+        )
 
     try:
         import vllm  # noqa: F401  # type: ignore
     except ImportError as err:
         logger.warning("vLLM is not installed (%s). Falling back to MockBackend.", err)
-        return MockBackend(config)
+        return MockBackend(
+            config,
+            tokens_per_second=config.mock_tokens_per_second,
+            contention_exponent=config.mock_contention_exponent,
+        )
 
     return VLLMBackend(config)

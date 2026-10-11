@@ -12,6 +12,10 @@ from typing import Dict, List, Optional, Tuple
 
 from scheduler_engine.types import InferenceRequest, RequestPriority
 
+QUEUE_ORDERS = ("priority", "fcfs", "sjf")
+SJF_AGING_TOKENS_PER_UNIT = 100.0
+
+
 class QueueEntry:
     """Represents a queued inference request alongside its priority entry metadata."""
     __slots__ = ("request", "enqueue_time", "entry_id", "cancelled", "future")
@@ -23,13 +27,19 @@ class QueueEntry:
         self.cancelled = False
         self.future = future
 
-    def calculate_effective_score(self, aging_factor: float, current_time: float) -> float:
+    def calculate_effective_score(self, aging_factor: float, current_time: float, order: str = "priority") -> float:
         """
-        Calculates priority score with aging promotion.
         Lower score = higher dispatch urgency.
-        score = base_priority - (wait_time_seconds * aging_factor)
+        priority: base_priority - wait_time * aging_factor
+        fcfs:     arrival timestamp
+        sjf:      requested tokens (plus image tokens) - wait_time * aging_factor * SJF_AGING_TOKENS_PER_UNIT
         """
         wait_time = max(0.0, current_time - self.enqueue_time)
+        if order == "fcfs":
+            return self.enqueue_time
+        if order == "sjf":
+            size = self.request.max_tokens + self.request.image_tokens
+            return float(size) - wait_time * aging_factor * SJF_AGING_TOKENS_PER_UNIT
         return float(self.request.priority.value) - (wait_time * aging_factor)
 
 
@@ -39,8 +49,11 @@ class PrioritizedRequestQueue:
     Thread-safe and async-compatible.
     """
 
-    def __init__(self, aging_factor: float = 0.25):
+    def __init__(self, aging_factor: float = 0.25, order: str = "priority"):
+        if order not in QUEUE_ORDERS:
+            raise ValueError(f"queue order must be one of {QUEUE_ORDERS}, got {order!r}")
         self.aging_factor = aging_factor
+        self.order = order
         self._lock = asyncio.Lock()
         self._entries: List[Tuple[float, int, QueueEntry]] = []  # Min-heap of (score, entry_id, entry)
         self._counter = itertools.count()
@@ -72,32 +85,41 @@ class PrioritizedRequestQueue:
             req_id = request.request_id or f"req-{entry_id}"
             request.request_id = req_id
 
-            score = entry.calculate_effective_score(self.aging_factor, time.time())
+            score = entry.calculate_effective_score(self.aging_factor, time.time(), self.order)
             heapq.heappush(self._entries, (score, entry_id, entry))
             self._entry_map[req_id] = entry
             self._notify_event.set()
             return future
 
+    def _refresh(self) -> None:
+        now = time.time()
+        live = [
+            (entry.calculate_effective_score(self.aging_factor, now, self.order), entry_id, entry)
+            for _, entry_id, entry in self._entries
+            if not entry.cancelled
+        ]
+        heapq.heapify(live)
+        self._entries = live
+
+    async def peek(self) -> Optional[QueueEntry]:
+        """The entry dequeue would return next, without removing it."""
+        async with self._lock:
+            self._refresh()
+            while self._entries:
+                _, _, entry = self._entries[0]
+                if entry.request.request_id in self._entry_map and not entry.cancelled:
+                    return entry
+                heapq.heappop(self._entries)
+            return None
+
     async def dequeue(self, timeout: Optional[float] = None) -> Optional[QueueEntry]:
-        """
-        Dequeue the highest-urgency request, re-evaluating aging scores across active entries.
-        """
+        """Dequeue the most urgent request under the configured order, refreshing aging scores first."""
         while True:
             async with self._lock:
                 if not self._entry_map:
                     self._notify_event.clear()
                 else:
-                    # Re-heapify with refreshed aging scores
-                    now = time.time()
-                    active_entries = []
-                    for _, entry_id, entry in self._entries:
-                        if not entry.cancelled:
-                            refreshed_score = entry.calculate_effective_score(self.aging_factor, now)
-                            active_entries.append((refreshed_score, entry_id, entry))
-
-                    heapq.heapify(active_entries)
-                    self._entries = active_entries
-
+                    self._refresh()
                     while self._entries:
                         _, _, entry = heapq.heappop(self._entries)
                         req_id = entry.request.request_id
@@ -105,7 +127,6 @@ class PrioritizedRequestQueue:
                             del self._entry_map[req_id]
                             return entry
 
-            # If queue is empty, wait for an enqueue event or timeout
             try:
                 await asyncio.wait_for(self._notify_event.wait(), timeout=timeout)
             except asyncio.TimeoutError:
@@ -141,7 +162,7 @@ class PrioritizedRequestQueue:
         snapshot = []
         for req_id, entry in list(self._entry_map.items()):
             wait_time = now - entry.enqueue_time
-            score = entry.calculate_effective_score(self.aging_factor, now)
+            score = entry.calculate_effective_score(self.aging_factor, now, self.order)
             snapshot.append({
                 "request_id": req_id,
                 "priority": entry.request.priority.name,

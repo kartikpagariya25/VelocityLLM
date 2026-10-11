@@ -1,0 +1,7 @@
+{
+  "model": "/models/llama-3.2-1b",
+  "gpu_memory_utilization": 0.80,
+  "max_model_len": 4096,
+  "max_num_seqs": 32,
+  "enable_prefix_caching": true
+}

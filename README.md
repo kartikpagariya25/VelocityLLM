@@ -311,6 +311,30 @@ python3 load_generator/compare_results.py \
   --dynamic results/dynamic_run_summary.json
 ```
 
+### Request-Rate Sweep and Server Comparison
+
+```bash
+# Static cap vs true static batching vs dynamic, on the simulated backend (no GPU)
+python3 tools/rate_sweep.py --mock --policies static,static-batch,dynamic --rps 1,2,4,8,16
+
+# Scheduling order and batch token budget on the dynamic engine
+python3 tools/rate_sweep.py --mock --policies dynamic:fcfs,dynamic:sjf,dynamic:priority
+python3 -m scheduler_engine.server --policy dynamic --max-batch-tokens 2048 --queue-order sjf
+
+# Against a vLLM server and Triton Inference Server
+python3 tools/rate_sweep.py --policies dynamic --target vllm=openai@http://localhost:8001#MODEL
+```
+
+The sweep replays one seeded Poisson workload per rate, then writes `sweep_summary.csv/json`, raw per-request CSVs, `throughput_latency_curves.png` and a capacity table (highest offered rate whose p99 stays within the SLA). Every response also carries `ttft_seconds` and `per_token_latency_ms`; `/stats` reports TTFT percentiles and goodput. See [`docs/COMPARISON.md`](docs/COMPARISON.md).
+
+| Flag | Meaning |
+|---|---|
+| `--policy static-batch` | Wait for N requests (`--initial-concurrency`) or `--static-batch-timeout-ms`, run the batch to completion, release all results together |
+| `--queue-order fcfs / sjf / priority` | Order in which the dynamic scheduler admits waiting requests |
+| `--max-batch-tokens N` | Token budget across in-flight requests (prompt, generation budget and image tokens) |
+| `--chunked-prefill`, `--max-num-batched-tokens N` | vLLM chunked prefill |
+| `--mock-tps`, `--mock-contention` | Speed and batch-scaling curve of the simulated backend |
+
 ---
 
 ## Benchmark Results
@@ -368,7 +392,7 @@ python3 load_generator/compare_results.py \
 - [x] **Phase 3** -- Robustness: input validation, GPU memory limits, OOM recovery, client-disconnect reclamation, burst shedding, structured logging -- 29/29 tests passing
 - [x] **Phase 4** -- Advanced load generation (Poisson/burst/mixed-prompt patterns) and full comparative benchmarking -- real, reproducible static vs dynamic data captured
 - [ ] **Phase 5** -- Live dashboard with static-vs-dynamic comparison view
-- [ ] **Phase 6** -- CLI packaging, final benchmark report document, optional Triton Inference Server deployment
+- [x] **Phase 6** -- Request-rate sweep, TTFT/goodput metrics, true static batching, FCFS/SJF/priority ordering, batch token budget, vLLM and Triton comparison harnesses, technical report (GPU comparison runs still to record)
 - [ ] **Phase 7** -- Demo rehearsal and presentation
 
 Full detail: [`docs/VelocityLLM_Implementation_Plan.md`](docs/VelocityLLM_Implementation_Plan.md)
@@ -381,6 +405,9 @@ Full detail: [`docs/VelocityLLM_Implementation_Plan.md`](docs/VelocityLLM_Implem
 |---|---|
 | [`docs/VelocityLLM_PRD.md`](docs/VelocityLLM_PRD.md) | Full product requirements -- goals, edge cases, test plan, KPIs |
 | [`docs/VelocityLLM_Implementation_Plan.md`](docs/VelocityLLM_Implementation_Plan.md) | Phased execution plan with exit criteria |
+| [`docs/Project1_Compliance.md`](docs/Project1_Compliance.md) | Requirement-by-requirement check against the Project 1 guide, with status and deviations |
+| [`docs/COMPARISON.md`](docs/COMPARISON.md) | How to run the sweep against vLLM and Triton and read the results |
+| [`docs/TECHNICAL_REPORT.md`](docs/TECHNICAL_REPORT.md) | Method, simulated sweep results and what remains to measure on the GPU |
 | [`docs/baseline_results_summary.md`](docs/baseline_results_summary.md) | Full benchmark methodology, results, and root-cause log for every issue found during testing |
 
 ---
