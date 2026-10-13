@@ -253,6 +253,12 @@ python3 -m scheduler_engine.server --policy static
 
 # CPU-only / no-GPU dev mode
 python3 -m scheduler_engine.server --policy dynamic --mock
+
+# Hugging Face Transformers runner (per-sequence KV cache) instead of vLLM
+python3 -m scheduler_engine.server --policy dynamic --runner hf --model-path /path/to/model
+
+# One command: install, test, run the simulated sweeps
+./run_project.sh all
 ```
 
 Key flags: `--port`, `--sla-ms` (target SLA in milliseconds), `--max-concurrency`, `--burst-shed-ratio`, `--structured-logs`.

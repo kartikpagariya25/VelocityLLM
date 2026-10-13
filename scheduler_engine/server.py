@@ -477,7 +477,7 @@ async def health():
     return {
         "status": "healthy",
         "policy": _config.policy,
-        "backend": "mock" if _config.use_mock_backend else "vllm",
+        "backend": "mock" if _config.use_mock_backend else _config.runner,
         "model": _config.model_path,
         "vision": _config.vision,
         "uptime_seconds": round(time.time() - _start_time, 2),
@@ -553,6 +553,12 @@ def main():
     parser.add_argument("--host", default="0.0.0.0", help="Host address to bind")
     parser.add_argument("--port", type=int, default=8000, help="Port to listen on")
     parser.add_argument(
+        "--runner",
+        choices=("vllm", "hf"),
+        default="vllm",
+        help="Model runner: vllm (AsyncLLMEngine) or hf (Hugging Face Transformers with per-sequence KV cache)",
+    )
+    parser.add_argument(
         "--mock",
         action="store_true",
         help="Use simulated MockBackend (for testing/development without GPU)",
@@ -624,6 +630,7 @@ def main():
         policy=args.policy,
         model_path=args.model_path,
         use_mock_backend=args.mock,
+        runner=args.runner,
         vision=args.vision,
         host=args.host,
         port=args.port,

@@ -2,7 +2,8 @@
 VelocityLLM - Inference Backend Abstraction
 Provides swappable inference execution backends:
 1. VLLMBackend: Production async engine utilizing vLLM PagedAttention and CUDA.
-2. MockBackend: High-fidelity simulation for deterministic automated testing and portable environments.
+2. HFBackend (scheduler_engine/hf_backend.py): Hugging Face Transformers runner with per-sequence KV cache.
+3. MockBackend: High-fidelity simulation for deterministic automated testing and portable environments.
 """
 
 import os
@@ -363,6 +364,10 @@ def create_backend(config: ServerConfig) -> InferenceBackend:
             tokens_per_second=config.mock_tokens_per_second,
             contention_exponent=config.mock_contention_exponent,
         )
+
+    if config.runner == "hf":
+        from scheduler_engine.hf_backend import HFBackend
+        return HFBackend(config)
 
     try:
         import vllm  # noqa: F401  # type: ignore

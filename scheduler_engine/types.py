@@ -261,6 +261,7 @@ class ServerConfig:
     policy: str = "dynamic"  # "dynamic", "static" or "static-batch"
     model_path: str = "/home/kartiklin/velocityllm/models/llama-3.2-1b"
     use_mock_backend: bool = False
+    runner: str = "vllm"  # "vllm" or "hf" (Hugging Face Transformers)
     vision: bool = False  # serve a vision-language model and accept images
     host: str = "0.0.0.0"
     port: int = 8000
