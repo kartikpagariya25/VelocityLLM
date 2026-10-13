@@ -1,0 +1,22 @@
+name: "hf_generate"
+backend: "python"
+max_batch_size: 8
+
+dynamic_batching {
+  preferred_batch_size: [ 8 ]
+  max_queue_delay_microseconds: 200000
+}
+
+input [
+  { name: "prompt" data_type: TYPE_STRING dims: [ 1 ] },
+  { name: "max_tokens" data_type: TYPE_INT32 dims: [ 1 ] }
+]
+
+output [
+  { name: "text" data_type: TYPE_STRING dims: [ 1 ] },
+  { name: "num_tokens" data_type: TYPE_INT32 dims: [ 1 ] }
+]
+
+instance_group [ { kind: KIND_GPU count: 1 } ]
+
+parameters: { key: "model_path" value: { string_value: "/models/llama-3.2-1b" } }

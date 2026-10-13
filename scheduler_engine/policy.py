@@ -10,12 +10,13 @@ from abc import ABC, abstractmethod
 import asyncio
 import logging
 import time
-from typing import AsyncIterator, Dict, List, Optional, Tuple
+from typing import AsyncIterator, Awaitable, Callable, Dict, List, Optional, Tuple
 import uuid
 
 from scheduler_engine.adaptive_controller import AdaptiveBatchController
 from scheduler_engine.admission import AdmissionController
 from scheduler_engine.backend import GPUOutOfMemoryError, InferenceBackend
+from scheduler_engine.metrics import LatencyTracker, timing_breakdown, token_cost
 from scheduler_engine.priority_queue import PrioritizedRequestQueue
 from scheduler_engine.types import (
     AdmissionResult,
@@ -121,6 +122,9 @@ class StaticBatchPolicy(SchedulerPolicy):
         self.total_image_tokens = 0
         self.sla_breaches = 0
         self.latencies: List[float] = []
+        self.queue_times: List[float] = []
+        self.tracker = LatencyTracker()
+        self.policy_name = "static_baseline"
         self._active_count = 0
         self._queued_count = 0
 
@@ -138,22 +142,49 @@ class StaticBatchPolicy(SchedulerPolicy):
 
         async with self.semaphore:
             self._queued_count -= 1
-            self._active_count += 1
-            start_exec = time.time()
-            queue_time = start_exec - enqueue_time
+            return await self._execute(request, enqueue_time)
 
-            generated_chunks = []
-            try:
-                async for chunk in self.backend.generate_stream(
-                    request.prompt, request.max_tokens, request.temperature, request.request_id,
-                    image=request.image,
-                ):
-                    generated_chunks.append(chunk)
-            finally:
-                self._active_count -= 1
+    async def _execute(
+        self,
+        request: InferenceRequest,
+        enqueue_time: float,
+        sink: Optional["asyncio.Queue"] = None,
+        after_generation: Optional[Callable[[], Awaitable[None]]] = None,
+    ) -> InferenceResponse:
+        """
+        Runs one request on the backend, records its metrics and optionally streams tokens into sink.
+        after_generation is awaited once generation ends, while the request still holds its slot.
+        """
+        self._active_count += 1
+        start_exec = time.time()
+        queue_time = start_exec - enqueue_time
+        generated_chunks: List[str] = []
+        first_token_time = None
+        try:
+            async for chunk in self.backend.generate_stream(
+                request.prompt, request.max_tokens, request.temperature, request.request_id,
+                image=request.image,
+            ):
+                if first_token_time is None:
+                    first_token_time = time.time()
+                if sink is not None:
+                    await sink.put(
+                        GenerationChunk(
+                            request_id=request.request_id,
+                            delta=chunk,
+                            token_index=len(generated_chunks),
+                            is_finished=False,
+                        )
+                    )
+                generated_chunks.append(chunk)
+            if after_generation is not None:
+                await after_generation()
+        finally:
+            self._active_count -= 1
 
-        exec_time = time.time() - start_exec
-        total_latency = time.time() - enqueue_time
+        end_time = time.time()
+        exec_time = end_time - start_exec
+        total_latency = end_time - enqueue_time
         full_text = "".join(generated_chunks)
         token_count = self.backend.pop_token_count(request.request_id) or len(generated_chunks)
 
@@ -161,14 +192,19 @@ class StaticBatchPolicy(SchedulerPolicy):
         self.total_tokens += token_count
         self.total_image_tokens += request.image_tokens
         self.latencies.append(total_latency)
+        self.queue_times.append(queue_time)
         if len(self.latencies) > 500:
             self.latencies.pop(0)
+        if len(self.queue_times) > 500:
+            self.queue_times.pop(0)
 
         target_sla_sec = (request.sla_target_ms or self.config.target_sla_ms) / 1000.0
         sla_met = total_latency <= target_sla_sec
         if not sla_met:
             self.sla_breaches += 1
 
+        ttft, per_token_ms = timing_breakdown(enqueue_time, first_token_time, end_time, token_count)
+        self.tracker.record(ttft, per_token_ms, token_count, sla_met)
         tps = (token_count / exec_time) if exec_time > 0 else 0.0
 
         return InferenceResponse(
@@ -183,6 +219,8 @@ class StaticBatchPolicy(SchedulerPolicy):
             tokens_per_second=round(tps, 2),
             sla_met=sla_met,
             priority=request.priority.name.lower(),
+            ttft_seconds=round(ttft or 0.0, 4),
+            per_token_latency_ms=round(per_token_ms or 0.0, 3),
         )
 
     async def schedule_stream(self, request: InferenceRequest) -> AsyncIterator[GenerationChunk]:
@@ -227,8 +265,10 @@ class StaticBatchPolicy(SchedulerPolicy):
         sorted_latencies = sorted(self.latencies) if self.latencies else [0.0]
         n = len(sorted_latencies)
 
+        avg_q = sum(self.queue_times) / len(self.queue_times) if self.queue_times else 0.0
+
         return SchedulerStats(
-            policy_name="static_baseline",
+            policy_name=self.policy_name,
             active_requests=self._active_count,
             queued_requests=self._queued_count,
             effective_concurrency_limit=self.max_concurrency,
@@ -244,7 +284,10 @@ class StaticBatchPolicy(SchedulerPolicy):
             gpu_utilization_percent=float(util),
             gpu_memory_used_mb=mem_used,
             gpu_memory_total_mb=mem_total,
+            avg_queue_wait_seconds=avg_q,
             total_image_tokens=self.total_image_tokens,
+            queue_order="fcfs",
+            **self.tracker.snapshot(),
         )
 
     async def shutdown(self) -> None:
@@ -266,12 +309,14 @@ class DynamicBatchPolicy(SchedulerPolicy):
         self.config = config
         self.admission_controller = AdmissionController(config)
         self.adaptive_controller = AdaptiveBatchController(config)
-        self.queue = PrioritizedRequestQueue(aging_factor=config.aging_factor)
+        self.queue = PrioritizedRequestQueue(aging_factor=config.aging_factor, order=config.queue_order)
+        self.tracker = LatencyTracker()
 
         # Concurrency state
         self._active_requests: Dict[str, asyncio.Task] = {}
         self._active_weights: Dict[str, float] = {}
         self._active_image_tokens: Dict[str, int] = {}
+        self._active_batch_tokens: Dict[str, int] = {}
         self._dispatcher_task: Optional[asyncio.Task] = None
         self._stop_event = asyncio.Event()
 
@@ -315,6 +360,15 @@ class DynamicBatchPolicy(SchedulerPolicy):
         self._active_requests.pop(request_id, None)
         self._active_weights.pop(request_id, None)
         self._active_image_tokens.pop(request_id, None)
+        self._active_batch_tokens.pop(request_id, None)
+
+    def _within_token_budget(self, request: InferenceRequest) -> bool:
+        """True when the request fits the batch token budget; an empty batch always accepts one request."""
+        budget = self.config.max_batch_tokens
+        if budget <= 0 or not self._active_batch_tokens:
+            return True
+        cost = token_cost(request.prompt, request.max_tokens, request.image_tokens)
+        return sum(self._active_batch_tokens.values()) + cost <= budget
 
     def _memory_baseline(self, mem_used: int) -> Optional[int]:
         """GPU memory in use once the model is loaded; later growth is what signals real pressure."""
@@ -420,6 +474,9 @@ class DynamicBatchPolicy(SchedulerPolicy):
                 await self._drop_hopeless()
 
                 while self.queue.size > 0 and self._active_load() < effective_limit:
+                    head = await self.queue.peek()
+                    if head is not None and not self._within_token_budget(head.request):
+                        break
                     entry = await self.queue.dequeue(timeout=0.01)
                     if entry is None:
                         break
@@ -430,6 +487,9 @@ class DynamicBatchPolicy(SchedulerPolicy):
                     self._active_requests[request.request_id] = task
                     self._active_weights[request.request_id] = self._request_weight(request)
                     self._active_image_tokens[request.request_id] = request.image_tokens
+                    self._active_batch_tokens[request.request_id] = token_cost(
+                        request.prompt, request.max_tokens, request.image_tokens
+                    )
 
                 await asyncio.sleep(0.01)
             except asyncio.CancelledError:
@@ -444,15 +504,19 @@ class DynamicBatchPolicy(SchedulerPolicy):
         start_exec = time.time()
         queue_time = start_exec - entry.enqueue_time
         chunks: List[str] = []
+        first_token_time: Optional[float] = None
 
         try:
             for attempt in range(self._max_attempts):
                 chunks.clear()
+                first_token_time = None
                 try:
                     async for chunk in self.backend.generate_stream(
                         request.prompt, request.max_tokens, request.temperature, request.request_id,
                         image=request.image,
                     ):
+                        if first_token_time is None:
+                            first_token_time = time.time()
                         chunks.append(chunk)
                     break
                 except asyncio.CancelledError:
@@ -468,8 +532,9 @@ class DynamicBatchPolicy(SchedulerPolicy):
                     logger.warning("Request %s failed before output (%s); retrying.", request.request_id, err)
                     await asyncio.sleep(0.2 * (attempt + 1))
 
-            total_latency = time.time() - entry.enqueue_time
-            exec_time = time.time() - start_exec
+            end_time = time.time()
+            total_latency = end_time - entry.enqueue_time
+            exec_time = end_time - start_exec
             full_response = "".join(chunks)
             token_count = self.backend.pop_token_count(request.request_id) or len(chunks)
 
@@ -477,6 +542,9 @@ class DynamicBatchPolicy(SchedulerPolicy):
             sla_met = total_latency <= target_sla_sec
             if not sla_met:
                 self.sla_breaches += 1
+
+            ttft, per_token_ms = timing_breakdown(entry.enqueue_time, first_token_time, end_time, token_count)
+            self.tracker.record(ttft, per_token_ms, token_count, sla_met)
 
             self.total_completed += 1
             self.total_tokens += token_count
@@ -511,6 +579,8 @@ class DynamicBatchPolicy(SchedulerPolicy):
                 tokens_per_second=round(tps, 2),
                 sla_met=sla_met,
                 priority=request.priority.name.lower(),
+                ttft_seconds=round(ttft or 0.0, 4),
+                per_token_latency_ms=round(per_token_ms or 0.0, 3),
             )
 
             if not entry.future.done():
@@ -636,6 +706,10 @@ class DynamicBatchPolicy(SchedulerPolicy):
             avg_queue_wait_seconds=avg_q,
             total_image_tokens=self.total_image_tokens,
             active_image_tokens=sum(self._active_image_tokens.values()),
+            active_batch_tokens=sum(self._active_batch_tokens.values()),
+            max_batch_tokens=self.config.max_batch_tokens,
+            queue_order=self.config.queue_order,
+            **self.tracker.snapshot(),
             client_disconnects_count=self.client_disconnects_count,
             burst_shed_count=self.admission_controller.total_burst_shed,
             oom_recoveries_count=self.oom_recoveries_count,

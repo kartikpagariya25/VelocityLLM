@@ -5,6 +5,7 @@ with swappable static/dynamic policies and OpenAI-compatible endpoints.
 """
 
 import argparse
+import json
 import yaml
 import asyncio
 from contextlib import asynccontextmanager
@@ -31,6 +32,8 @@ from scheduler_engine.policy import (
     SchedulerPolicy,
     StaticBatchPolicy,
 )
+from scheduler_engine.priority_queue import QUEUE_ORDERS
+from scheduler_engine.static_batching import StaticBatchingPolicy
 from scheduler_engine.types import (
     CompletionChoice,
     CompletionRequest,
@@ -101,6 +104,8 @@ async def lifespan(app: FastAPI):
 
     if _config.policy == "static":
         _policy = StaticBatchPolicy(backend=backend, config=_config)
+    elif _config.policy == "static-batch":
+        _policy = StaticBatchingPolicy(backend=backend, config=_config)
     else:
         _policy = DynamicBatchPolicy(backend=backend, config=_config)
 
@@ -355,14 +360,14 @@ async def generate_stream(req: InferenceRequest, request: Request):
                 "reason": e.reason,
                 "retry_after_seconds": e.retry_after,
             }
-            yield f"data: {error_payload}\n\n"
+            yield f"data: {json.dumps(error_payload)}\n\n"
         except GPUOutOfMemoryError as e:
             error_payload = {
                 "error": "GPU Out of Memory",
                 "correlation_id": corr_id,
                 "reason": str(e),
             }
-            yield f"data: {error_payload}\n\n"
+            yield f"data: {json.dumps(error_payload)}\n\n"
 
     return StreamingResponse(
         event_generator(),
@@ -438,6 +443,18 @@ async def get_prometheus_metrics():
         "# TYPE velocityllm_validation_errors counter",
         f"velocityllm_validation_errors {stats.validation_errors_count}",
         "",
+        "# HELP velocityllm_p99_ttft_seconds Observed 99th percentile time to first token",
+        "# TYPE velocityllm_p99_ttft_seconds gauge",
+        f"velocityllm_p99_ttft_seconds {stats.p99_ttft_seconds:.4f}",
+        "",
+        "# HELP velocityllm_per_token_latency_ms Mean inter-token latency during decode",
+        "# TYPE velocityllm_per_token_latency_ms gauge",
+        f"velocityllm_per_token_latency_ms {stats.avg_per_token_latency_ms:.3f}",
+        "",
+        "# HELP velocityllm_goodput_tokens Tokens from requests that finished within their SLA",
+        "# TYPE velocityllm_goodput_tokens counter",
+        f"velocityllm_goodput_tokens {stats.goodput_tokens}",
+        "",
         "# HELP velocityllm_p99_latency_seconds Observed 99th percentile end-to-end latency",
         "# TYPE velocityllm_p99_latency_seconds gauge",
         f"velocityllm_p99_latency_seconds {stats.p99_latency_seconds:.4f}",
@@ -460,7 +477,7 @@ async def health():
     return {
         "status": "healthy",
         "policy": _config.policy,
-        "backend": "mock" if _config.use_mock_backend else "vllm",
+        "backend": "mock" if _config.use_mock_backend else _config.runner,
         "model": _config.model_path,
         "vision": _config.vision,
         "uptime_seconds": round(time.time() - _start_time, 2),
@@ -479,11 +496,6 @@ def load_config_file(path):
         return yaml.safe_load(f) or {}
 
 
-def load_config_file(path):
-    with open(path, "r") as f:
-        return yaml.safe_load(f) or {}
-
-
 def main():
     parser = argparse.ArgumentParser(description="VelocityLLM Dynamic Serving Engine")
     parser.add_argument(
@@ -494,9 +506,38 @@ def main():
     )
     parser.add_argument(
         "--policy",
-        choices=["dynamic", "static"],
+        choices=["dynamic", "static", "static-batch"],
         default="dynamic",
-        help="Scheduler policy to run (default: dynamic)",
+        help="dynamic = continuous batching, static = fixed concurrency cap, static-batch = wait for N or a timeout, run the batch to completion",
+    )
+    parser.add_argument(
+        "--queue-order",
+        choices=list(QUEUE_ORDERS),
+        default="priority",
+        help="Order in which the dynamic scheduler admits waiting requests (default: priority with aging)",
+    )
+    parser.add_argument(
+        "--max-batch-tokens",
+        type=int,
+        default=0,
+        help="Token budget across in-flight requests for the dynamic scheduler; 0 disables it",
+    )
+    parser.add_argument(
+        "--static-batch-timeout-ms",
+        type=float,
+        default=200.0,
+        help="static-batch policy: dispatch a partial batch after this many milliseconds",
+    )
+    parser.add_argument(
+        "--chunked-prefill",
+        action="store_true",
+        help="Enable vLLM chunked prefill so long prompts do not stall decoding",
+    )
+    parser.add_argument(
+        "--max-num-batched-tokens",
+        type=int,
+        default=None,
+        help="vLLM per-step token budget (used with --chunked-prefill)",
     )
     parser.add_argument(
         "--model-path",
@@ -512,9 +553,27 @@ def main():
     parser.add_argument("--host", default="0.0.0.0", help="Host address to bind")
     parser.add_argument("--port", type=int, default=8000, help="Port to listen on")
     parser.add_argument(
+        "--runner",
+        choices=("vllm", "hf"),
+        default="vllm",
+        help="Model runner: vllm (AsyncLLMEngine) or hf (Hugging Face Transformers with per-sequence KV cache)",
+    )
+    parser.add_argument(
         "--mock",
         action="store_true",
         help="Use simulated MockBackend (for testing/development without GPU)",
+    )
+    parser.add_argument(
+        "--mock-tps",
+        type=float,
+        default=80.0,
+        help="Simulated single-stream decode speed of the mock backend, in tokens per second",
+    )
+    parser.add_argument(
+        "--mock-contention",
+        type=float,
+        default=0.0,
+        help="Mock backend: per-stream speed divides by concurrency**this (0 = no slowdown, 0.5 = aggregate grows with the square root of the batch)",
     )
     parser.add_argument(
         "--sla-ms",
@@ -571,6 +630,7 @@ def main():
         policy=args.policy,
         model_path=args.model_path,
         use_mock_backend=args.mock,
+        runner=args.runner,
         vision=args.vision,
         host=args.host,
         port=args.port,
@@ -581,6 +641,13 @@ def main():
         burst_shed_queue_ratio=args.burst_shed_ratio,
         enable_structured_logging=args.structured_logs,
         api_key=args.api_key,
+        queue_order=args.queue_order,
+        max_batch_tokens=args.max_batch_tokens,
+        static_batch_timeout_ms=args.static_batch_timeout_ms,
+        chunked_prefill=args.chunked_prefill,
+        max_num_batched_tokens=args.max_num_batched_tokens,
+        mock_tokens_per_second=args.mock_tps,
+        mock_contention_exponent=args.mock_contention,
     )
     set_config(cfg)
 

@@ -112,6 +112,8 @@ class InferenceResponse(BaseModel):
     sla_met: bool = True
     priority: str = "normal"
     image_tokens: int = 0
+    ttft_seconds: float = 0.0
+    per_token_latency_ms: float = 0.0
 
 
 class GenerationChunk(BaseModel):
@@ -196,6 +198,15 @@ class SchedulerStats:
     avg_queue_wait_seconds: float = 0.0
     total_image_tokens: int = 0
     active_image_tokens: int = 0
+    p50_ttft_seconds: float = 0.0
+    p95_ttft_seconds: float = 0.0
+    p99_ttft_seconds: float = 0.0
+    avg_per_token_latency_ms: float = 0.0
+    goodput_requests: int = 0
+    goodput_tokens: int = 0
+    active_batch_tokens: int = 0
+    max_batch_tokens: int = 0
+    queue_order: str = "priority"
 
     # Phase 3 Robustness Telemetry
     client_disconnects_count: int = 0
@@ -228,6 +239,15 @@ class SchedulerStats:
             "avg_queue_wait_seconds": round(self.avg_queue_wait_seconds, 4),
             "total_image_tokens": self.total_image_tokens,
             "active_image_tokens": self.active_image_tokens,
+            "p50_ttft_seconds": round(self.p50_ttft_seconds, 4),
+            "p95_ttft_seconds": round(self.p95_ttft_seconds, 4),
+            "p99_ttft_seconds": round(self.p99_ttft_seconds, 4),
+            "avg_per_token_latency_ms": round(self.avg_per_token_latency_ms, 3),
+            "goodput_requests": self.goodput_requests,
+            "goodput_tokens": self.goodput_tokens,
+            "active_batch_tokens": self.active_batch_tokens,
+            "max_batch_tokens": self.max_batch_tokens,
+            "queue_order": self.queue_order,
             "client_disconnects_count": self.client_disconnects_count,
             "burst_shed_count": self.burst_shed_count,
             "oom_recoveries_count": self.oom_recoveries_count,
@@ -238,9 +258,10 @@ class SchedulerStats:
 @dataclass
 class ServerConfig:
     """Master configuration for the scheduler service."""
-    policy: str = "dynamic"  # "dynamic" or "static"
+    policy: str = "dynamic"  # "dynamic", "static" or "static-batch"
     model_path: str = "/home/kartiklin/velocityllm/models/llama-3.2-1b"
     use_mock_backend: bool = False
+    runner: str = "vllm"  # "vllm" or "hf" (Hugging Face Transformers)
     vision: bool = False  # serve a vision-language model and accept images
     host: str = "0.0.0.0"
     port: int = 8000
@@ -255,6 +276,13 @@ class ServerConfig:
     max_queue_size: int = 256
     aging_factor: float = 0.25     # Priority promotion rate per second of waiting
     gpu_sample_interval: float = 0.2
+    queue_order: str = "priority"  # "fcfs", "sjf" or "priority"
+    max_batch_tokens: int = 0      # token budget across in-flight requests; 0 disables the limit
+    chunked_prefill: bool = False  # vLLM chunked prefill so long prompts do not stall decoding
+    max_num_batched_tokens: Optional[int] = None  # vLLM per-step token budget
+    static_batch_timeout_ms: float = 200.0  # static-batch policy: dispatch a partial batch after this wait
+    mock_tokens_per_second: float = 80.0    # mock backend: single-stream decode speed
+    mock_contention_exponent: float = 0.0   # mock backend: per-stream speed divides by concurrency**exponent
 
     # Phase 3 Robustness additions
     enable_structured_logging: bool = False
