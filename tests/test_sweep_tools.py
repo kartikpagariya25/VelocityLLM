@@ -202,3 +202,21 @@ async def test_velocity_protocol_flags_stream_rejections():
     finally:
         await runner.cleanup()
     assert samples[0].status == "rejected"
+
+
+def test_merge_sweeps_relabels_single_target_and_combines(tmp_path):
+    import json
+    from tools.merge_sweeps import load_rows
+
+    def write(name, target):
+        d = tmp_path / name
+        d.mkdir()
+        row = {"target": target, "rps": 2.0, "offered": 10, "served": 10, "rejected": 0, "e2e_p99": 1.0,
+               "goodput_tokens_per_s": 5.0, "tokens_per_s": 6.0}
+        (d / "sweep_summary.json").write_text(json.dumps({"sla_ms": 8000, "rows": [row]}))
+        return str(d)
+
+    plain = load_rows(write("a", "dynamic"))
+    renamed = load_rows(write("b", "dynamic") + "=dynamic (chunked on)")
+    assert plain[0]["target"] == "dynamic"
+    assert renamed[0]["target"] == "dynamic (chunked on)"
