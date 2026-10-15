@@ -101,7 +101,7 @@ def run_once(args, target: Target, rps: float, lengths, seed: int, repeat: int) 
     raw.mkdir(parents=True, exist_ok=True)
     rows = sample_rows(samples)
     suffix = f"_r{repeat + 1}" if args.repeats > 1 else ""
-    with open(raw / f"{target.name.replace(":", "-")}_rps{rps:g}{suffix}.csv", "w", newline="") as f:
+    with open(raw / f"{target.name.replace(':', '-')}_rps{rps:g}{suffix}.csv", "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         writer.writeheader()
         writer.writerows(rows)
