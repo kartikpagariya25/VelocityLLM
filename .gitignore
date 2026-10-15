@@ -26,6 +26,7 @@ secrets.json
 
 *.log
 *.csv
+!results/**/*.csv
 
 .DS_Store
 Thumbs.db

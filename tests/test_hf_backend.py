@@ -63,7 +63,7 @@ async def test_greedy_output_matches_reference_generate(config):
         prompt = "the scheduler admits"
         text = await collect(backend, prompt, 12, "r1")
         count = backend.pop_token_count("r1")
-        ids = backend.tokenizer(prompt, return_tensors="pt").input_ids
+        ids = backend.tokenizer(prompt, return_tensors="pt").input_ids.to(backend.device)
         with torch.inference_mode():
             ref = backend.model.generate(ids, max_new_tokens=12, do_sample=False, pad_token_id=0)
         expected = backend.tokenizer.decode(ref[0, ids.shape[1]:], skip_special_tokens=True)

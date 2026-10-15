@@ -101,7 +101,7 @@ def run_once(args, target: Target, rps: float, lengths, seed: int, repeat: int) 
     raw.mkdir(parents=True, exist_ok=True)
     rows = sample_rows(samples)
     suffix = f"_r{repeat + 1}" if args.repeats > 1 else ""
-    with open(raw / f"{target.name}_rps{rps:g}{suffix}.csv", "w", newline="") as f:
+    with open(raw / f"{target.name.replace(":", "-")}_rps{rps:g}{suffix}.csv", "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         writer.writeheader()
         writer.writerows(rows)
@@ -187,18 +187,19 @@ def print_report(args, rows: List[Dict], capacity: Dict[str, Dict]) -> None:
     sla_s = args.sla_ms / 1000.0
     simulated = "  [simulated mock backend]" if args.mock else ""
     print("\n" + paint(f"Rate sweep  |  SLA {sla_s:g} s  |  seed {args.seed}{simulated}", BOLD))
-    head = f"{'target':<14}{'rps':>6}{'served':>9}{'rej':>5}{'tok/s':>9}{'good tok/s':>12}{'p50 s':>8}{'p99 s':>8}{'ttft p99':>10}{'in SLA':>8}"
+    head = f"{'target':<18}{'rps':>6}{'served':>10}{'rej':>6}{'tok/s':>9}{'good tok/s':>12}{'p50 s':>8}{'p99 s':>8}{'ttft p99':>10}{'in SLA':>8}"
     print(paint(head, DIM))
     for r in rows:
         late = r["e2e_p99"] > sla_s
-        line = (f"{r['target']:<14}{r['rps']:>6g}{r['served']:>5.0f}/{r['offered']:<3.0f}{r['rejected']:>2.0f}{r['tokens_per_s']:>9.0f}"
+        served = f"{r['served']:.0f}/{r['offered']:.0f}"
+        line = (f"{r['target']:<18}{r['rps']:>6g}{served:>10}{r['rejected']:>6.0f}{r['tokens_per_s']:>9.0f}"
                 f"{r['goodput_tokens_per_s']:>12.0f}{r['e2e_p50']:>8.2f}{r['e2e_p99']:>8.2f}{r['ttft_p99']:>10.2f}{r['sla_attainment_percent']:>7.0f}%")
         print(paint(line, RED) if late else line)
     print("\n" + paint("Capacity at equal p99 latency (p99 <= SLA, rejections <= %.0f%%)" % (args.reject_tolerance * 100), BOLD))
-    print(paint(f"{'target':<14}{'max rps':>9}{'peak good tok/s':>18}{'at rps':>8}{'peak tok/s':>12}", DIM))
+    print(paint(f"{'target':<18}{'max rps':>9}{'peak good tok/s':>18}{'at rps':>8}{'peak tok/s':>12}", DIM))
     best = max((c["max_rps_within_p99_sla"] for c in capacity.values()), default=0.0)
     for name, c in capacity.items():
-        line = (f"{name:<14}{c['max_rps_within_p99_sla']:>9g}{c['peak_goodput_tokens_per_s']:>18.0f}"
+        line = (f"{name:<18}{c['max_rps_within_p99_sla']:>9g}{c['peak_goodput_tokens_per_s']:>18.0f}"
                 f"{c['peak_goodput_at_rps']:>8g}{c['peak_tokens_per_s']:>12.0f}")
         print(paint(line, GREEN) if c["max_rps_within_p99_sla"] == best and best > 0 else line)
     estimated = [r["target"] for r in rows if r["ttft_is_estimate"]]
