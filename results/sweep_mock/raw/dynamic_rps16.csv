@@ -1,0 +1,321 @@
+index,arrival,status,e2e_seconds,ttft_seconds,tokens,per_token_ms,ttft_is_estimate,error
+0,0.06375376795467506,ok,0.15566739599989887,0.026378267999916716,8,18.46987542856888,False,
+1,0.12133816374964264,ok,6.589536253999995,0.023386011999946277,115,57.59780914035131,False,
+2,0.1975462620151321,ok,2.3148774900000717,0.02476992800006883,45,52.0478991363637,False,
+3,0.21695746958638124,ok,4.462305169000047,0.025050627000155146,78,57.626682363634956,False,
+4,0.26535171796164886,ok,5.04553593799983,0.023117578999972466,86,59.087274811763024,False,
+5,0.2946184243167184,ok,0.7623410870000953,0.07589665000000423,16,45.76296246667274,False,
+6,0.3321523451421598,ok,4.472064043000046,0.03771835399993506,76,59.12460918666814,False,
+7,0.3495516190637315,ok,0.3551239270000224,0.022674362999850928,9,41.55619550002143,False,
+8,0.4792602194960135,ok,5.847093306000033,0.02614529900006346,96,61.27313691578916,False,
+9,0.48365899906426923,ok,8.83578110999997,0.02385662200003935,143,62.05580625352065,False,
+10,0.5416864233899747,ok,6.13316779999991,0.025865245999966646,100,61.68992478787821,False,
+11,0.6103997259481753,ok,2.118626838999944,0.02356090100010988,36,59.85902679999526,False,
+12,0.6859148843103253,ok,2.7854173919999994,0.025455270000065866,46,61.33249159999853,False,
+13,0.6935745011126622,ok,1.1343786689999433,0.025012765999917974,20,58.38767910526449,False,
+14,0.7639408704676272,ok,5.982718789999808,0.02282653199995366,96,62.735707978945825,False,
+15,0.773919980629081,ok,13.17920943099989,0.023644842999829052,209,63.24790667307721,False,
+16,0.7791705865604613,ok,2.3931037279999146,0.02662999599988325,39,62.27562452631661,False,
+17,0.7804034131957243,ok,2.074924256000031,0.025499533999891355,34,62.103779454549695,False,
+18,0.851102083550714,ok,6.65040645299996,0.024061747999894578,106,63.10804480952442,False,
+19,0.8683660033148276,ok,1.8368347010000434,0.024712777000104325,30,62.48696289654963,False,
+20,0.9183267121801361,ok,3.3144124279999687,0.025435897999841472,53,63.249548653848606,False,
+21,1.1644445943042312,ok,2.4657675949999884,0.02325240200002554,39,64.27671560526218,False,
+22,1.2874010965375033,ok,1.4659827999998924,0.023703522999994675,23,65.5581489545408,False,
+23,1.3857288295150831,ok,15.208235117000186,0.025557026000115002,239,63.79276508823558,False,
+24,1.4356489798819707,ok,3.0858001730000524,0.027351803000101427,48,65.07336957446704,False,
+25,1.4943189521111315,ok,4.410635412999909,0.024369359000047552,69,64.50391255882148,False,
+26,1.504083648822856,ok,5.616114610000068,0.022901616999888574,88,64.28980451724344,False,
+27,1.6114496316775933,ok,3.5984348509998654,0.022936763999950927,56,65.00905612727118,False,
+28,1.635386144108725,ok,15.023458044000108,0.023912953000035486,236,63.827851451064134,False,
+29,1.6750059943467492,rejected,0.004643641000029675,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+30,1.8794393997452217,ok,3.1501009270000395,0.02310957200006669,49,65.1456532291661,False,
+31,1.885342978305677,rejected,0.0027161030000115716,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+32,2.099277643851118,rejected,0.003725213000052463,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+33,2.311541149650501,rejected,0.003100190999930419,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+34,2.3199720331469593,rejected,0.002530345999957717,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+35,2.349112387785311,rejected,0.00742095500004325,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+36,2.349597383857369,rejected,0.006839926999873569,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+37,2.3652523121818816,rejected,0.002733008999939557,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+38,2.3877968294358034,rejected,0.003184571000019787,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+39,2.453739693430461,rejected,0.002967767999962234,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+40,2.479554973391302,rejected,0.0025777760001801653,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+41,2.4845740306854647,rejected,0.0022963330000038695,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+42,2.5128882558996795,ok,4.976246231000005,0.023577073000069504,78,64.32037867532384,False,
+43,2.5296943216971917,rejected,0.00419056499981707,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+44,2.536534308477052,rejected,0.003612658000065494,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+45,2.6741979176945216,rejected,0.003565489000038724,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+46,2.801729594656629,ok,14.832767461000003,0.023085079999873415,233,63.83483784913849,False,
+47,2.844931902579753,ok,2.7515545840001323,0.024781379000160086,43,64.92317154761838,False,
+48,2.849128377263182,ok,15.027945432000024,0.0258546390000447,236,63.83868422553182,False,
+49,2.9045166662458697,ok,2.943860242000028,0.023241607000045406,46,64.90263633333295,False,
+50,2.923730212290273,rejected,0.004824740999993082,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+51,2.9457936966032974,rejected,0.00317841099990801,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+52,2.9796384700915843,rejected,0.003792985000018234,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+53,3.0699908008515058,rejected,0.0029232009999304864,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+54,3.1470869430609674,rejected,0.0030197900000530353,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+55,3.209102915999397,ok,3.899996701999953,0.022453590999930384,61,64.62571851666704,False,
+56,3.2855661214523173,rejected,0.005205595000006724,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+57,3.365499097840684,rejected,0.0035326849999819387,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+58,3.4514806371937876,rejected,0.004057714999817108,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+59,3.530454037120845,ok,3.768464627000185,0.022107886000185317,59,64.59235760344826,False,
+60,3.560692638983323,rejected,0.0033589699999083678,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+61,3.7578785820843974,ok,10.952934816000152,0.022232282999993913,172,63.92223703508865,False,
+62,3.771993779940933,rejected,0.004616062999957649,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+63,3.776733377751247,rejected,0.0035680759999650036,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+64,3.9064757323348065,rejected,0.003885909000018728,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+65,3.9131230673487365,rejected,0.0029617949999192206,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+66,3.9161242400722034,rejected,0.0041042689999812865,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+67,4.018545738214883,rejected,0.004758500999969328,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+68,4.027969154984668,rejected,0.020326436000004833,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+69,4.029023380561752,rejected,0.019930316999989373,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+70,4.043868235926001,rejected,0.006007162000059907,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+71,4.124364938064618,rejected,0.004822888000035164,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+72,4.14204991405833,rejected,0.0031167710001227533,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+73,4.161699342510946,rejected,0.00347530299995924,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+74,4.192367813306968,rejected,0.0035456690000046365,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+75,4.228631353843164,ok,7.656244780999941,0.025120556000047145,120,64.1270943277302,False,
+76,4.245983341864954,rejected,0.004879235999851517,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+77,4.424999843587754,rejected,0.003777972000079899,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+78,4.492180151570974,rejected,0.004059456000049977,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+79,4.522954500571057,ok,10.819415443000025,0.025348938999968595,170,63.87021600000034,False,
+80,4.530727763924468,rejected,0.003525473000081547,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+81,4.54429480337701,rejected,0.005101593999825127,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+82,4.582497178858647,rejected,0.00433252400011952,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+83,4.630277236841966,rejected,0.003989249999904132,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+84,4.726025151819408,ok,6.958680630000117,0.023221893000027194,109,64.2172105277786,False,
+85,4.792626296258497,rejected,0.0029340099999899394,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+86,5.1022095598392285,ok,2.5609855979998883,0.022783210999932635,40,65.08211248717835,False,
+87,5.111636945511318,ok,5.2505214010000145,0.023851006000086272,82,64.52679499999911,False,
+88,5.142710130981209,rejected,0.009572269000045708,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+89,5.3042923913904545,ok,6.3344805849999375,0.02419683499988423,99,64.39065051020462,False,
+90,5.495414419820836,ok,6.207046652999907,0.024620857999934742,97,64.40026869791637,False,
+91,5.57559804459613,rejected,0.0042628219998732675,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+92,5.609241405452719,ok,1.0451884369999789,0.023156968999956007,16,68.13543120000152,False,
+93,5.657984753850659,rejected,0.0034661130000586127,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+94,5.837639941593152,rejected,0.004367266000144809,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+95,5.908306869567893,ok,3.534032340999829,0.02370330699977785,55,65.00609322222317,False,
+96,5.912285163966468,ok,1.7371109380001144,0.0209115530001327,27,66.00766865384546,False,
+97,5.934141829883462,rejected,0.0042323499999383785,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+98,5.977763403863302,rejected,0.0038606210000580177,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+99,6.031344399385858,rejected,0.0038527320000412146,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+100,6.043573153555047,rejected,0.003113027999916085,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+101,6.059550930987477,rejected,0.003227729999935036,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+102,6.066223372294642,rejected,0.005137912999998662,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+103,6.071955114241754,rejected,0.005000357999961125,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+104,6.102654178262104,rejected,0.003080722000049718,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+105,6.235241410475548,rejected,0.003553814000042621,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+106,6.246062088736339,rejected,0.0033224640001208172,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+107,6.287997615952725,rejected,0.006107794999934413,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+108,6.399065667173621,ok,2.4433677889999217,0.022761766000030548,38,65.42178440540246,False,
+109,6.457764159177514,rejected,0.0051907920001212915,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+110,6.4593757130385,rejected,0.004420361000029516,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+111,6.478081020958773,rejected,0.0033826789999693574,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+112,6.484734135198365,rejected,0.002957498000114356,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+113,6.554335622515228,rejected,0.003701168999896254,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+114,6.659786025202676,ok,10.962188738999885,0.02277074900007392,172,63.973204619881926,False,
+115,6.666629445375807,rejected,0.006391141999984029,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+116,6.667750001329238,rejected,0.006216454999957932,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+117,6.734657028390541,ok,4.49501738999993,0.023733638999829054,70,64.80121378261015,False,
+118,6.827097439596988,ok,3.9800233669998306,0.02307834099997308,62,64.8679512458993,False,
+119,6.981839345810007,ok,2.4571890660001827,0.02490455500014832,38,65.73741921621715,False,
+120,6.982642643252603,rejected,0.0033676389998618106,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+121,7.0104070512015175,rejected,0.004189206000091872,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+122,7.095487643104488,rejected,0.0032298339999670134,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+123,7.16352922767873,ok,2.642724122000118,0.024964144000023225,41,65.44399945000237,False,
+124,7.2439833552848905,ok,7.59206128400001,0.023742330000004586,119,64.13829622033903,False,
+125,7.268116013009804,rejected,0.006805436000149712,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+126,7.300842796123167,ok,1.756937624000102,0.02301300799990713,27,66.68940830769981,False,
+127,7.332262423758151,rejected,0.0035628420000648475,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+128,7.4017393232405535,rejected,0.004302951999989091,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+129,7.43007262692964,rejected,0.004306784999926094,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+130,7.488385045745193,ok,0.5937632620000386,0.023070791000009194,9,71.33655887500367,False,
+131,7.538513558475,ok,2.7781664259998706,0.023227289000033124,43,65.5937889761866,False,
+132,7.550851622416157,rejected,0.0029892099998960475,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+133,7.580393026922931,rejected,0.003508561999979065,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+134,7.591093796721294,rejected,0.003099026999962007,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+135,7.617316986877072,rejected,0.0062064940000254865,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+136,7.762481503035757,ok,2.6451873720000094,0.02495540500012794,41,65.50579917499704,False,
+137,7.762824282184289,ok,2.2650070380000216,0.02469190100009655,35,65.89162167646838,False,
+138,7.781120010983096,rejected,0.0030383749999600695,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+139,7.857799134511312,rejected,0.004462009999997463,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+140,7.902453420474656,rejected,0.003696816999990915,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+141,7.919875486943491,rejected,0.0031628020001335244,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+142,7.936205114390057,rejected,0.004675570000017615,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+143,8.049325855081452,rejected,0.004649639000035677,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+144,8.06194831496554,rejected,0.003146976999914841,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+145,8.08161337938416,ok,3.22383142700005,0.026286937999884685,50,65.25600997959522,False,
+146,8.123284588876826,rejected,0.0028597339999123506,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+147,8.249545920503095,rejected,0.003152689999978975,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+148,8.304803011248227,rejected,0.003633622000052128,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+149,8.377553952947633,rejected,0.0037340970000059315,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+150,8.478131033255133,rejected,0.004592117999891343,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+151,8.576096984521225,rejected,0.0037923129998489458,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+152,8.68620493881703,rejected,0.003759817999934967,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+153,8.73222651146013,rejected,0.005189506000078836,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+154,8.742754561688129,rejected,0.0028931809999903635,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+155,8.753216523268094,rejected,0.0038359600000603677,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+156,8.814347000684888,rejected,0.004065483999966091,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+157,8.861757187939034,ok,1.6845607689999724,0.02274508599998626,26,66.47262731999945,False,
+158,8.900120917216881,rejected,0.0036125130000073113,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+159,8.959976442120238,rejected,0.003935523000109242,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+160,9.032038870412821,rejected,0.003867400999979509,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+161,9.049220852039255,rejected,0.003930484999955297,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+162,9.127024678141598,ok,3.3819009389999337,0.023763422999991235,53,64.57956761538351,False,
+163,9.21178829527381,rejected,0.004782761999877039,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+164,9.243259393646523,rejected,0.0037376899999799207,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+165,9.320042877884754,ok,4.286501111999996,0.023202705000130663,67,64.59543040908886,False,
+166,9.337020946362397,rejected,0.006763776999832771,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+167,9.393507923723778,rejected,0.0040660520000983524,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+168,9.4208034724658,rejected,0.003565902999980608,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+169,9.428665853522743,rejected,0.0031275159999495372,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+170,9.519719400622511,ok,2.887302449999879,0.023066663000008703,45,65.09626788636069,False,
+171,9.530274144528722,ok,13.51734634200011,0.024072069000112606,237,57.17489098728812,False,
+172,9.55754476157232,rejected,0.0034511510000356793,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+173,9.603493103249448,rejected,0.005118347999996331,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+174,9.640140193341441,rejected,0.004136208999852897,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+175,9.677033636233576,rejected,0.003208541000049081,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+176,9.716777933458685,rejected,0.006521947999999611,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+177,9.785994618718808,rejected,0.0038628029999472346,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+178,9.795353416289503,rejected,0.0037787450000905665,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+179,9.849031740715462,ok,13.691667989999814,0.02407266599993818,246,55.7861033632648,False,
+180,9.852420356540945,rejected,0.004009648000192101,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+181,9.926646060511489,rejected,0.005452942000147232,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+182,9.955500149068127,rejected,0.004269275000069683,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+183,10.038351239845754,ok,6.1768424659999255,0.023587178000070708,97,64.09640924999849,False,
+184,10.048153056488603,rejected,0.00557914800015169,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+185,10.121801486735881,rejected,0.0046081839998350915,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+186,10.14715302986681,rejected,0.005870690000165268,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+187,10.152695588305805,rejected,0.0037260849999256607,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+188,10.211742888092568,rejected,0.0032098700000915414,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+189,10.217003348138476,rejected,0.002667745000053401,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+190,10.220474716949838,rejected,0.0026470780001091043,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+191,10.306394013722421,rejected,0.005456718000004912,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+192,10.346486703792891,ok,1.7198188840000057,0.02237475399988398,27,65.28631269231238,False,
+193,10.389221794510679,ok,2.422615920999988,0.0233177689999593,38,64.84589600000076,False,
+194,10.461354312528805,ok,8.916777015999969,0.02372560099979637,141,63.521795821429805,False,
+195,10.603987199509428,ok,1.6684671380000964,0.02426739800012001,26,65.76798959999905,False,
+196,10.624167499265031,rejected,0.004404411999985314,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+197,10.74089561923625,rejected,0.004570348000015656,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+198,10.759749088660591,rejected,0.003143450999914421,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+199,10.792152749039587,rejected,0.0036551749999489402,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+200,10.793722010515976,rejected,0.003210814000112805,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+201,10.81465850155632,ok,0.9209931319999214,0.02249159799998779,14,69.11550261537951,False,
+202,10.836965813096812,rejected,0.003707328000018606,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+203,10.858518116815052,rejected,0.003412420999893584,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+204,10.902264114213935,rejected,0.0036782599997877696,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+205,11.150332845829032,rejected,0.004735991999950784,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+206,11.245643011246331,ok,8.199550836999833,0.0224827600000026,130,63.38812462790566,False,
+207,11.288443888659177,rejected,0.011355583999829832,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+208,11.289248156589762,rejected,0.01109478700004729,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+209,11.290942728459434,rejected,0.009724014999846986,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+210,11.389301466945502,ok,2.4769229819999055,0.023125179999851753,39,64.57362636842247,False,
+211,11.521883425896736,rejected,0.00401667100004488,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+212,11.530910570865027,rejected,0.005277621999994153,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+213,11.53514456490904,rejected,0.0038864569999077503,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+214,11.638392204409243,ok,1.919624741000007,0.025995975999876464,30,65.29754362069414,False,
+215,11.660641626037007,rejected,0.004595436000045083,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+216,11.67535363910579,rejected,0.003812487000004694,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+217,11.88274951945072,ok,9.667136657000128,0.024043286000051012,162,59.89498988198805,False,
+218,11.99436091687232,ok,1.9275226080001175,0.023641810000071928,30,65.65106200000157,False,
+219,12.059460260854845,ok,5.752187263999986,0.022181022000040684,90,64.38209260674095,False,
+220,12.11232300270451,ok,9.17169864199991,0.025766840999949636,152,60.56908477483418,False,
+221,12.179048999478606,ok,9.699834691999968,0.025945118999970873,165,58.9871315426829,False,
+222,12.249572175088222,rejected,0.0038265590001174132,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+223,12.318912825647981,ok,2.1158322139999655,0.023087983999857897,33,65.39825718750336,False,
+224,12.327985170122416,rejected,0.003290848000006008,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+225,12.411478861410922,ok,2.128171335999923,0.022658567999997103,33,65.79727399999769,False,
+226,12.45576241687307,rejected,0.00308702400002403,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+227,12.565760074590683,ok,5.6324511330001314,0.022596366000016133,88,64.4810892758634,False,
+228,12.697096938973452,rejected,0.003430852000064988,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+229,12.708520515133674,rejected,0.00288089199989372,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+230,12.744659748078428,rejected,0.0032851559999471647,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+231,12.778891055523282,rejected,0.005018774000063786,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+232,12.806957518371998,ok,12.20724274500003,0.02589714800001275,252,48.53125735856581,False,
+233,12.834313066958108,rejected,0.0028071219999219466,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+234,12.903024298515968,rejected,0.002943661000017528,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+235,12.924781395232777,rejected,0.0035270119999495364,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+236,12.977820140175302,rejected,0.0048561529999915365,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+237,13.01473005037939,rejected,0.0030427020001297933,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+238,13.026642484428303,rejected,0.003427147999900626,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+239,13.039929299559853,rejected,0.004571273000010478,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+240,13.053632247944638,rejected,0.0032031139999162406,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+241,13.08970699871686,rejected,0.0034243130000959354,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+242,13.151206675147021,rejected,0.005193448999989414,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+243,13.248573716885238,rejected,0.0034162819999892236,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+244,13.252473596588107,rejected,0.003664699999944787,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+245,13.359365732007614,rejected,0.0070257969998692715,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+246,13.374347172036318,rejected,0.0033069759999762027,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+247,13.38631623580912,rejected,0.0038319969999065506,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+248,13.50551549129104,rejected,0.0030232920000798913,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+249,13.546783437835668,rejected,0.003453126000067641,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+250,13.728992894008018,ok,6.051745770000025,0.022117515999980242,97,62.808627645833795,False,
+251,13.803934040999666,ok,2.620494342000029,0.023881252000137465,41,64.91532724999729,False,
+252,13.8811074382397,ok,3.8931016819999513,0.02463880799996332,61,64.47438123333313,False,
+253,13.890552458835202,rejected,0.008081253999989713,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+254,14.030053212418238,ok,2.888690276000034,0.02347401599990917,45,65.1185513636392,False,
+255,14.142812360443964,ok,0.7325769199999286,0.02360943100006807,11,70.89674889998605,False,
+256,14.147181147122051,rejected,0.0034965489999194688,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+257,14.149596388605968,rejected,0.0032584539999334083,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+258,14.230361443802934,rejected,0.0036788519998935953,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+259,14.296137381981845,rejected,0.0030908409999028663,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+260,14.309453050520348,rejected,0.00696969699993133,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+261,14.350071214260508,rejected,0.002950908000002528,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+262,14.437075587596034,ok,9.174223440000105,0.023287096000103702,176,52.29106482285715,False,
+263,14.507887122827093,rejected,0.003979561000051035,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+264,14.638472288256608,ok,0.5898427150000316,0.022180864000119982,9,70.95773137498895,False,
+265,14.648440695573411,rejected,0.003220752000061111,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+266,14.691143657816697,rejected,0.0034250879998580785,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+267,14.6946213491021,rejected,0.0023837170001570485,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+268,14.70261096220904,rejected,0.0018482510001831542,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+269,14.801457775961621,ok,4.873908560000018,0.025253434999967794,78,62.969547077922726,False,
+270,14.80270427305537,rejected,0.0051621669999804,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+271,15.046982468891704,ok,5.048997745999941,0.022418784000137748,82,62.0565303950593,False,
+272,15.056530189425613,ok,0.9836232440000003,0.02285357000005206,15,68.62640528571059,False,
+273,15.063812860001681,rejected,0.004964153999935661,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+274,15.12225876793682,rejected,0.004885025000021415,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+275,15.238878517043872,ok,3.2026343219999944,0.026638231000106316,50,64.81624675509975,False,
+276,15.306520323570824,rejected,0.004152162999844222,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+277,15.52511691231322,ok,8.243078554000022,0.024614357000018572,163,50.73126047530866,False,
+278,15.696352135283801,rejected,0.006063266999944972,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+279,15.731302975354737,rejected,0.003080734999912238,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+280,15.740271807011435,rejected,0.003028062000112186,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+281,15.75713734564583,rejected,0.003254767000044012,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+282,15.922541177706034,rejected,0.003443418999950154,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+283,15.935078012105581,rejected,0.004881274000126723,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+284,16.029373360033293,rejected,0.002693589000045904,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+285,16.04267525537083,ok,8.768326218000084,0.02320439899995108,192,45.78597810994834,False,
+286,16.129500866148184,rejected,0.0034966950001944497,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+287,16.176038028468444,rejected,0.005127394000055574,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+288,16.241410503153286,ok,1.2428063239999574,0.02346992399998271,19,67.74091111110971,False,
+289,16.27273556448186,rejected,0.0031698510001660907,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+290,16.32159148008083,rejected,0.0034232600000905222,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+291,16.392695539360744,rejected,0.0032368870001846517,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+292,16.561526823291043,ok,4.580553437000162,0.022975807999955578,79,58.430482423079575,False,
+293,16.58724486700417,ok,2.061246378000078,0.025750212000048123,32,65.66116664516225,False,
+294,16.668087966345677,ok,4.944270137999865,0.023974366999937047,88,56.555123804596874,False,
+295,16.679076116590693,rejected,0.004677351999816892,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+296,16.688693428596732,rejected,0.004381025000157024,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+297,16.70908403813185,rejected,0.0043138940000062576,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+298,16.73122789853186,rejected,0.003742172000102073,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+299,16.792937388288298,rejected,0.0033394279998901766,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+300,16.84235751456652,rejected,0.00430668500007414,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+301,16.887164820634208,rejected,0.004031794999946214,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+302,16.99063627520046,ok,7.713641333999931,0.02370213800008969,173,44.70894881395256,False,
+303,16.997422645342322,rejected,0.005705324000018663,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+304,17.05593824069054,rejected,0.004817376999881162,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+305,17.057281874161113,rejected,0.0044461239999691315,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+306,17.270774404580845,rejected,0.0033736370000951865,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+307,17.28403401566637,rejected,0.0034383699999125383,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+308,17.38915801382443,rejected,0.0036360720000629954,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+309,17.41091728824884,rejected,0.003906919000201015,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+310,17.489552232929114,ok,1.5764785310000207,0.027267336000022624,25,64.55046645833325,False,
+311,17.500945739282187,rejected,0.003897049999977753,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+312,17.57216941784661,rejected,0.0039349070000298525,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+313,17.599346398033322,rejected,0.0048831039998731285,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
+314,17.617220659348853,ok,0.9734396680000827,0.02930346100015413,15,67.4383004999949,False,
+315,17.65209803949937,ok,7.598025304000203,0.02351286400016761,188,40.50541411764724,False,
+316,17.782018588016104,ok,3.3598821819998648,0.022386802000028183,60,56.567718305081975,False,
+317,17.901535598838624,ok,3.4180069540000204,0.023049784000022555,62,55.655035573770455,False,
+318,17.933938734897307,ok,8.055556337000098,0.024270839000109845,242,33.32483609128626,False,
+319,18.05622714351153,rejected,0.0038773839999066695,,0,,False,GPU memory soft limit reached (89.8% >= 88%). Shedding non-urgent traffic.
