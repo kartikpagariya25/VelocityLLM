@@ -51,7 +51,6 @@ export default function Problem() {
     <section className={`problem ${still.current ? 'problem--still' : ''}`} id="problem" ref={root}>
       <div className="problem__sticky wrap">
         <div className="problem__copy">
-          <p className="kicker">The problem</p>
           <div className="problem__beats">
             {BEATS.map(([title, text]) => (
               <div className="beat" key={title}>
@@ -87,7 +86,6 @@ export default function Problem() {
             <div className="ps__fill" />
           </div>
           <div className="ps__stamp mono">Out of memory</div>
-          <p className="ps__note mono">Illustration</p>
         </div>
       </div>
     </section>
