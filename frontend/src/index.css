@@ -154,6 +154,10 @@ button {
   border: 1px solid var(--line);
 }
 
+.btn:active {
+  transform: translateY(1px) scale(0.98);
+}
+
 @media (hover: hover) {
   .btn:hover {
     transform: translateY(-2px);

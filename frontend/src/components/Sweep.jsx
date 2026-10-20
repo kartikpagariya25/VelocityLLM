@@ -97,7 +97,7 @@ export default function Sweep() {
                   </text>
                 </g>
               )}
-              <line x1={xs(rateIndex)} x2={xs(rateIndex)} y1={PAD.t} y2={H - PAD.b} className="sweep__marker" />
+              <line x1="0" x2="0" y1={PAD.t} y2={H - PAD.b} className="sweep__marker" style={{ transform: `translateX(${xs(rateIndex)}px)` }} />
               {SWEEP_SERIES.map((s) => (
                 <g key={s.id} className={`sweep__series sweep__series--${s.id}`}>
                   <path d={path(s)} pathLength="1" className={drawn ? 'is-drawn' : ''} />

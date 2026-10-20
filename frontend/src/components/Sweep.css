@@ -44,6 +44,7 @@
   stroke: var(--ink);
   stroke-width: 1;
   opacity: 0.18;
+  transition: transform 0.5s var(--ease);
 }
 
 .sweep__series path {
@@ -89,6 +90,16 @@
 .sweep__series circle {
   stroke: var(--bg);
   stroke-width: 2;
+  transition: cx 0.5s var(--ease), cy 0.6s var(--ease);
+}
+
+.sweep__row dd b {
+  transition: color 0.3s;
+}
+
+.sweep__rates button:active,
+.seg button:active {
+  transform: scale(0.97);
 }
 
 .sweep__hint {
