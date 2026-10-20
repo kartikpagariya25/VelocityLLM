@@ -27,7 +27,7 @@ pip install velocityllm && velocityllm bench --mock --models-dir ./models
 
 ## Headline results
 
-Same model, same GPU, same 100-user flood, same SLA (8 s). The only change is the scheduler: **Static** (fixed concurrency 8) vs **VelocityLLM Dynamic**. Median of 3 repeats, run with the published `velocityllm` PyPI package on an **RTX 5050 Laptop GPU (8 GB), WSL2**.
+Same model, same GPU, same 100-user flood, same SLA (8 s). The only change is the scheduler: **Static** (fixed concurrency 8) vs **VelocityLLM Dynamic**. Median of 3 repeats, run with the published `velocityllm` PyPI package on an **RTX 5050 GPU (8 GB), WSL2**.
 
 | Model | Policy | Served | p50 | p95 | p99 | On time (SLA 8 s) | Tokens/s |
 |---|---|---|---|---|---|---|---|
