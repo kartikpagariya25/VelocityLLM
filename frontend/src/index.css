@@ -16,9 +16,9 @@
   --focus: #2e5bff;
   --radius: 14px;
   --shadow: 0 12px 40px rgba(10, 10, 10, 0.06);
-  --display: 'Space Grotesk', system-ui, sans-serif;
-  --body: 'Inter', system-ui, sans-serif;
-  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --display: 'Space Grotesk Variable', system-ui, sans-serif;
+  --body: 'Geist Variable', system-ui, sans-serif;
+  --mono: 'JetBrains Mono Variable', ui-monospace, monospace;
   --gutter: clamp(16px, 4vw, 48px);
   --section: clamp(96px, 14vw, 180px);
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
