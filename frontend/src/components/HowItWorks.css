@@ -224,6 +224,17 @@
     width: 120px;
     font-size: 0.75rem;
   }
+  .node:first-child.node--on .node__name {
+    left: 0;
+    transform: none;
+    text-align: left;
+  }
+  .node:last-child.node--on .node__name {
+    left: auto;
+    right: 0;
+    transform: none;
+    text-align: right;
+  }
   .rail__line {
     top: 22px;
   }
