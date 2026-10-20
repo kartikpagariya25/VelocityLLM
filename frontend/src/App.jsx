@@ -22,7 +22,7 @@ function Site() {
   return (
     <>
       <Navbar />
-      <main>
+      <main id="main">
         <Hero />
         <Problem />
         <Race />
