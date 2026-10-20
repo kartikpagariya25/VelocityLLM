@@ -76,7 +76,7 @@
 
 .node--done .node__icon {
   border-color: rgba(255, 77, 28, 0.45);
-  color: var(--hot);
+  color: var(--hot-ink);
 }
 
 .node--on {
@@ -109,7 +109,7 @@
 
 .panel__step {
   font-size: 0.75rem;
-  color: var(--hot);
+  color: var(--hot-ink);
   letter-spacing: 0.14em;
 }
 
@@ -169,7 +169,7 @@
 }
 
 .panel__flag b {
-  color: var(--hot);
+  color: var(--hot-ink);
   font-weight: 500;
 }
 

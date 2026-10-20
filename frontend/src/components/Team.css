@@ -39,7 +39,7 @@
   font-size: 3.2rem;
   font-weight: 800;
   letter-spacing: -0.05em;
-  color: var(--hot);
+  color: var(--hot-ink);
 }
 
 .person__photo img {
@@ -84,7 +84,7 @@
 
 .person__links a:hover {
   border-color: var(--hot);
-  color: var(--hot);
+  color: var(--hot-ink);
 }
 
 @media (max-width: 980px) {

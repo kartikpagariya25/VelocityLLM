@@ -181,15 +181,15 @@
   margin-top: 4px;
   font-style: normal;
   font-size: 0.75rem;
-  color: var(--ok-text, #0d7a49);
+  color: var(--ok-ink);
 }
 
 .sweep__row--dynamic dd b {
-  color: var(--hot-text, var(--hot));
+  color: var(--hot-ink);
 }
 
 .sweep__row.is-late dd em {
-  color: var(--bad);
+  color: var(--bad-ink);
 }
 
 @media (max-width: 860px) {

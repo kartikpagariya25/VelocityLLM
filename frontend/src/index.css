@@ -8,6 +8,10 @@
   --hot: #ff4d1c;
   --hot-2: #ff7a4d;
   --hot-soft: #ffe3d8;
+  --hot-ink: #d13508;
+  --hot-ink-2: #b32d05;
+  --ok-ink: #0d7a49;
+  --bad-ink: #c62338;
   --cold: #8c8c86;
   --cold-dim: #e7e7e2;
   --bad: #e8384f;
@@ -106,7 +110,7 @@ button {
   font-size: 0.75rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--hot);
+  color: var(--hot-ink);
   margin-bottom: 1.25rem;
 }
 
@@ -142,7 +146,7 @@ button {
 }
 
 .btn--hot {
-  background: var(--hot);
+  background: var(--hot-ink);
   color: #fff;
 }
 
@@ -155,11 +159,11 @@ button {
     transform: translateY(-2px);
   }
   .btn--hot:hover {
-    background: var(--hot-2);
+    background: var(--hot-ink-2);
   }
   .btn--ghost:hover {
-    border-color: var(--hot);
-    color: var(--hot);
+    border-color: var(--hot-ink);
+    color: var(--hot-ink);
   }
 }
 

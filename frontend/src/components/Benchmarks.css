@@ -81,7 +81,7 @@
 }
 
 .row__name sup {
-  color: var(--hot);
+  color: var(--hot-ink);
   margin-left: 2px;
 }
 
@@ -135,7 +135,7 @@
 }
 
 .row__meta b.good {
-  color: var(--hot);
+  color: var(--hot-ink);
 }
 
 .row__meta span {
@@ -156,7 +156,7 @@
 }
 
 .foot sup {
-  color: var(--hot);
+  color: var(--hot-ink);
 }
 
 @media (max-width: 860px) {
