@@ -10,6 +10,7 @@ const LINKS = [
   ['race', 'The race'],
   ['engine', 'Engine'],
   ['results', 'Results'],
+  ['sweep', 'Load test'],
   ['team', 'Team'],
 ]
 

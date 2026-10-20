@@ -6,6 +6,7 @@ import Problem from './components/Problem'
 import Race from './components/Race'
 import HowItWorks from './components/HowItWorks'
 import Benchmarks from './components/Benchmarks'
+import Sweep from './components/Sweep'
 import ModelStrip from './components/ModelStrip'
 import Team from './components/Team'
 import Footer from './components/Footer'
@@ -28,6 +29,7 @@ function Site() {
         <Race />
         <HowItWorks />
         <Benchmarks />
+        <Sweep />
         <ModelStrip />
         <Team />
       </main>
