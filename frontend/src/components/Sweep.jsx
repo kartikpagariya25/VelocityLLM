@@ -56,7 +56,7 @@ export default function Sweep() {
   const rate = SWEEP_RATES[rateIndex]
 
   return (
-    <section className="sweep section" id="sweep" ref={root}>
+    <section className="section" id="sweep" ref={root}>
       <div className="wrap">
         <h2 className="h2" data-lines>Same GPU, same traffic, flatter tail.</h2>
         <p className="lede" data-reveal>

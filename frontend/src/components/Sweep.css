@@ -61,9 +61,12 @@
   transition: stroke-dashoffset 1.6s var(--ease);
 }
 
-.sweep__series--static path,
-.sweep__series--static circle {
+.sweep__series--static path {
   stroke: var(--ink-soft);
+}
+
+.sweep__series--static circle {
+  stroke: var(--bg);
   fill: var(--ink-soft);
 }
 
@@ -81,9 +84,11 @@
   fill: var(--cold);
 }
 
-.sweep__series--dynamic path,
-.sweep__series--dynamic circle {
+.sweep__series--dynamic path {
   stroke: var(--hot);
+}
+
+.sweep__series--dynamic circle {
   fill: var(--hot);
 }
 
