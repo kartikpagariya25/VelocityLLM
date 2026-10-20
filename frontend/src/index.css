@@ -8,6 +8,10 @@
   --hot: #ff4d1c;
   --hot-2: #ff7a4d;
   --hot-soft: #ffe3d8;
+  --hot-ink: #d13508;
+  --hot-ink-2: #b32d05;
+  --ok-ink: #0d7a49;
+  --bad-ink: #c62338;
   --cold: #8c8c86;
   --cold-dim: #e7e7e2;
   --bad: #e8384f;
@@ -16,9 +20,9 @@
   --focus: #2e5bff;
   --radius: 14px;
   --shadow: 0 12px 40px rgba(10, 10, 10, 0.06);
-  --display: 'Space Grotesk', system-ui, sans-serif;
-  --body: 'Inter', system-ui, sans-serif;
-  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --display: 'Space Grotesk Variable', system-ui, sans-serif;
+  --body: 'Geist Variable', system-ui, sans-serif;
+  --mono: 'JetBrains Mono Variable', ui-monospace, monospace;
   --gutter: clamp(16px, 4vw, 48px);
   --section: clamp(96px, 14vw, 180px);
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
@@ -106,7 +110,7 @@ button {
   font-size: 0.75rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--hot);
+  color: var(--hot-ink);
   margin-bottom: 1.25rem;
 }
 
@@ -142,7 +146,7 @@ button {
 }
 
 .btn--hot {
-  background: var(--hot);
+  background: var(--hot-ink);
   color: #fff;
 }
 
@@ -150,16 +154,20 @@ button {
   border: 1px solid var(--line);
 }
 
+.btn:active {
+  transform: translateY(1px) scale(0.98);
+}
+
 @media (hover: hover) {
   .btn:hover {
     transform: translateY(-2px);
   }
   .btn--hot:hover {
-    background: var(--hot-2);
+    background: var(--hot-ink-2);
   }
   .btn--ghost:hover {
-    border-color: var(--hot);
-    color: var(--hot);
+    border-color: var(--hot-ink);
+    color: var(--hot-ink);
   }
 }
 

@@ -19,16 +19,32 @@ sweep() {
   python tools/rate_sweep.py --policies dynamic:fcfs,dynamic:sjf,dynamic:priority --mock --mock-contention 0.5 --rps 2,6,10 --repeats 3 --out-dir results/policy_order_mock
 }
 
+web() {
+  command -v npm > /dev/null || { echo "npm not found: install Node.js 20 or newer"; exit 1; }
+  (cd frontend && npm ci --silent && npm run build)
+  (cd frontend && exec npx vite preview --host --port "${WEB_PORT:-4173}")
+}
+
+dev() {
+  command -v npm > /dev/null || { echo "npm not found: install Node.js 20 or newer"; exit 1; }
+  (cd frontend && npm ci --silent && exec npm run dev)
+}
+
 serve() {
   python -m scheduler_engine.server --policy "${POLICY:-dynamic}" --runner "${RUNNER:-vllm}" --model-path "${MODEL_PATH:?set MODEL_PATH}" --port "${PORT:-8000}"
 }
 
-setup
+case "$MODE" in
+  web|dev) ;;
+  *) setup ;;
+esac
 case "$MODE" in
   setup) ;;
   test) tests ;;
   sweep) sweep ;;
   serve) serve ;;
+  web) web ;;
+  dev) dev ;;
   all) tests; sweep ;;
-  *) echo "usage: $0 [setup|test|sweep|serve|all]"; exit 1 ;;
+  *) echo "usage: $0 [setup|test|sweep|serve|web|dev|all]"; exit 1 ;;
 esac

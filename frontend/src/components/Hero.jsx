@@ -37,7 +37,6 @@ export default function Hero() {
         .from('.hero__kicker', { opacity: 0, y: 16, duration: 0.9 }, 0.2)
         .from('.hero__lede, .hero__cta', { opacity: 0, y: 24, duration: 1, stagger: 0.12 }, 0.7)
         .from('.hero__stage', { opacity: 0, scale: 0.92, duration: 1.8 }, 0.3)
-        .from('.hero__foot', { opacity: 0, duration: 1 }, 1.4)
     },
     { scope: root },
   )
@@ -69,7 +68,6 @@ export default function Hero() {
           </a>
         </div>
       </div>
-      <p className="hero__foot mono">Scroll</p>
     </section>
   )
 }

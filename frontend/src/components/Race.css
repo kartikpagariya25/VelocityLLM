@@ -71,7 +71,7 @@
 }
 
 .lane--dynamic .lane__head h3 {
-  color: var(--hot);
+  color: var(--hot-ink);
 }
 
 .lane__head p {
@@ -108,7 +108,7 @@
 }
 
 .stat--bad b {
-  color: var(--bad);
+  color: var(--bad-ink);
 }
 
 .race__bar {
@@ -186,11 +186,11 @@
 
 .race__verdict em {
   font-style: normal;
-  color: var(--hot);
+  color: var(--hot-ink);
 }
 
 .race__verdict .good {
-  color: var(--hot);
+  color: var(--hot-ink);
 }
 
 .race__note {

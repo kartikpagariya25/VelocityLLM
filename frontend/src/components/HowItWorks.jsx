@@ -23,7 +23,6 @@ function Sawtooth({ refEl }) {
         strokeDasharray="1"
         strokeDashoffset="0"
       />
-      <text x="4" y="86" className="saw__t">concurrency limit over time (illustration)</text>
     </svg>
   )
 }
@@ -104,9 +103,6 @@ export default function HowItWorks() {
           ))
         ) : (
         <div className="panel" aria-live="polite">
-          <p className="panel__step mono">
-            {String(active + 1).padStart(2, '0')} / {String(STAGES.length).padStart(2, '0')}
-          </p>
           <h3 key={stage.id}>{stage.name}</h3>
           <p className="panel__line">{stage.line}</p>
           <ul className="panel__chips">

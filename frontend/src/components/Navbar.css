@@ -58,7 +58,7 @@
 
 .nav__repo:hover {
   border-color: var(--hot);
-  color: var(--hot);
+  color: var(--hot-ink);
 }
 
 .nav__progress {
@@ -79,7 +79,7 @@
   margin-right: 12px;
   padding: 8px 18px;
   border-radius: 999px;
-  background: var(--hot);
+  background: var(--hot-ink);
   color: #fff;
   font-size: 0.85rem;
   font-weight: 500;
@@ -88,4 +88,65 @@
 
 .nav__arena:hover {
   transform: translateY(-2px);
+}
+
+.skip {
+  position: absolute;
+  left: 12px;
+  top: -64px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 0.85rem;
+  transition: top 0.2s var(--ease);
+}
+
+.skip:focus-visible {
+  top: 10px;
+}
+
+.nav__toggle {
+  display: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin-right: 8px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+}
+
+.nav__sheet {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .nav__toggle {
+    display: grid;
+  }
+  .nav__sheet {
+    display: grid;
+    max-height: 0;
+    overflow: hidden;
+    visibility: hidden;
+    transition: max-height 0.45s var(--ease), visibility 0s 0.45s;
+    border-top: 1px solid transparent;
+  }
+  .nav__sheet--open {
+    max-height: 360px;
+    visibility: visible;
+    transition: max-height 0.45s var(--ease), visibility 0s;
+    border-top-color: var(--line);
+  }
+  .nav__sheet a {
+    padding: 16px var(--gutter);
+    font-family: var(--display);
+    font-size: 1.35rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    border-bottom: 1px solid var(--line);
+  }
+  .nav__sheet a:last-child {
+    border-bottom: 0;
+  }
 }

@@ -106,7 +106,6 @@ export default function Race() {
   return (
     <section className="race section" id="race" ref={root}>
       <div className="wrap">
-        <p className="kicker" data-reveal>The race</p>
         <h2 className="h2" data-lines>Same traffic. Two schedulers.</h2>
         <p className="lede" data-reveal>
           Real requests from our test runs on an RTX 5050, replayed side by side. Each bar is one request: pale is waiting, solid is running.

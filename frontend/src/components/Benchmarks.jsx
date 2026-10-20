@@ -62,7 +62,6 @@ export default function Benchmarks() {
   return (
     <section className="results section" id="results" ref={root}>
       <div className="wrap">
-        <p className="kicker" data-reveal>Results</p>
         <h2 className="h2" data-lines>Same load. Shorter tail.</h2>
 
         <div className="big" data-reveal>
