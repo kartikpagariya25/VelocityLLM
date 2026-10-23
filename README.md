@@ -8,13 +8,12 @@
 ![vLLM](https://img.shields.io/badge/Powered%20by-vLLM-FF8C00?style=for-the-badge)
 ![CUDA](https://img.shields.io/badge/CUDA-Enabled-FF9500?style=for-the-badge&logo=nvidia&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/API-FastAPI-FFA500?style=for-the-badge&logo=fastapi&logoColor=white)
-![Tests](https://img.shields.io/badge/Tests-29%20passing-FFB347?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-FFC300?style=for-the-badge)
 
 **A dynamic / continuous batching scheduler engine for LLM inference serving —**
 **built to prove, with live numbers, that intelligent scheduling raises GPU throughput and SLA reliability over traditional static batching.**
 
-[Overview](#overview) • [Architecture](#architecture) • [Setup](#setup-guide) • [Usage](#usage) • [Benchmark Results](#benchmark-results) • [Troubleshooting](#troubleshooting--common-fixes) • [Roadmap](#roadmap)
+[Overview](#overview) • [Demo](#demo) • [Prerequisites](#prerequisites) • [Setup](#setup) • [Run](#run-the-project) • [Test](#test-the-project) • [Troubleshooting](#troubleshooting--common-fixes)
 
 </div>
 
@@ -31,10 +30,9 @@ This project builds a **dynamic/continuous batching scheduler** on top of [vLLM]
 - Prioritizes requests with **anti-starvation aging**, so low-priority traffic is never indefinitely starved
 - Survives real failure conditions — GPU OOM, client disconnects, malformed input, traffic bursts — without crashing or silently degrading
 - Is **model-agnostic** — the scheduler only reasons about request metadata (arrival time, token counts, priority), never model internals, so it works with any vLLM-supported model
-- Proves its improvement with **real, reproducible benchmark data** against a static-batching baseline running through the same codebase
+- Compares itself against a static-batching baseline through the same codebase, from the command line or the Velocity Arena web page
 
 > Academic/Industry Project — guided by Dr. Viomesh
-> Team: Kartik R. Pagariya (scheduler architecture, infra, benchmarking) · Vikrant Kadam (Phase 2/3 engine implementation)
 
 ---
 
@@ -44,15 +42,6 @@ This project builds a **dynamic/continuous batching scheduler** on top of [vLLM]
 
 A voiced walkthrough (about 6.75 minutes, English narration with an on-screen pointer): the static batch problem, the controller explained as a kitchen, a live tour of the Velocity Arena, and the measured sweep on an RTX 5050 laptop GPU. Slides: [PDF](docs/presentation/VelocityLLM.pdf) · [PPTX](docs/presentation/VelocityLLM.pptx).
 
-### The batch governor
-
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/media/batch-governor-light.svg">
-  <img src="docs/media/batch-governor-dark.svg" alt="Isometric bench rig: a 32-slot tray, a sliding shutter that sets the concurrency limit, a rack and spring, and a dial gauge with a red SLA zone" width="100%">
-</picture>
-
-The tray holds up to 32 requests and the shutter decides how many slots are open. While requests wait and p99 has room, the shutter steps out by 1, then 2, then 4. When p99 crosses the SLA, or memory passes 94%, the spring pulls it back to three quarters of where it was. This is a model of the controller rule, not a measurement. Open [the interactive version](docs/media/batch-governor.html) in a browser and move the pointer across it to change the load.
-
 ---
 
 ## Problem Statement
@@ -61,147 +50,60 @@ The tray holds up to 32 requests and the shutter decides how many slots are open
 |---|---|
 | **Problem** | Static batch sizes under-utilize GPU throughput under variable request loads in production LLM serving. |
 | **Objective** | Build a dynamic/continuous batching scheduler that maximizes GPU utilization while meeting latency SLAs. |
-| **Tech Stack** | Python, vLLM, Triton Inference Server, CUDA |
 | **Expected Output** | A serving engine with measurable throughput gains at equal or better p99 latency. |
-
----
-
-## Architecture
-
-```
-                   +--------------------------------------+
-Client Requests -> | API Gateway (FastAPI)                |
-                   | - Request validation & sanitization  |
-                   | - Correlation-ID middleware           |
-                   +--------------------------------------+
-                                       |
-                                       v
-                   +--------------------------------------+
-                   | Admission Controller                 |
-                   | - SLA-headroom prediction              |
-                   | - Tiered burst shedding (429)           |
-                   | - GPU memory soft/hard limits            |
-                   +--------------------------------------+
-                                       |
-                                       v
-                   +--------------------------------------+
-                   | Prioritized Request Queue             |
-                   | - Priority ordering (HIGH/NORMAL/LOW) |
-                   | - Anti-starvation aging                 |
-                   +--------------------------------------+
-                                       |
-                                       v
-                   +--------------------------------------+
-                   | Dispatch Loop + Adaptive Controller   |
-                   | - AIMD concurrency ceiling tuning     |
-                   | - OOM emergency throttle                |
-                   +--------------------------------------+
-                                       |
-                                       v
-                   +--------------------------------------+
-                   | Inference Backend (swappable)          |
-                   | VLLMBackend (real GPU)                 |
-                   | MockBackend (CPU-only test/dev)         |
-                   +--------------------------------------+
-                                       |
-                                       v
-                   +--------------------------------------+
-                   | vLLM AsyncLLMEngine                    |
-                   | (PagedAttention + Continuous Batching) |
-                   +--------------------------------------+
-                                       |
-                                       v
-                   +--------------------------------------+
-                   | GPU (CUDA)                             |
-                   +--------------------------------------+
-
-SchedulerPolicy is an abstract interface with two swappable implementations
-in the SAME codebase, selected via --policy flag:
-  - StaticBatchPolicy   : fixed concurrency, no SLA awareness (baseline)
-  - DynamicBatchPolicy  : everything above (the novel contribution)
-
-Observability: GET /stats (JSON) and GET /metrics (Prometheus format) expose
-live scheduler telemetry -- active/queued requests, concurrency limit, SLA
-compliance rate, GPU utilization, OOM/disconnect/burst-shed counters.
-```
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Inference engine | [vLLM](https://github.com/vllm-project/vllm) AsyncLLMEngine (PagedAttention + continuous batching) |
-| API layer | FastAPI + Uvicorn, OpenAI-compatible `/v1/completions` + native `/generate` |
-| Scheduler core | Pure Python asyncio, policy-pattern (`SchedulerPolicy` ABC) |
-| Admission control | Predictive SLA-headroom check, tiered priority-aware burst shedding |
-| Adaptive concurrency | AIMD (Additive-Increase / Multiplicative-Decrease) feedback controller |
-| Priority queue | Min-heap with time-based anti-starvation aging |
-| Backend abstraction | `VLLMBackend` (production) / `MockBackend` (dependency-free testing) |
-| Load generator | Python asyncio + aiohttp; flood, constant, Poisson, and burst traffic patterns |
-| GPU monitoring | `nvidia-smi` polled from a dedicated background thread (never blocks the event loop) |
-| Metrics | Prometheus-format counters/histograms at `/metrics` |
-| Testing | pytest + pytest-asyncio + httpx, 29 tests across unit/integration/robustness |
-| Model | Llama-3.2-1B-Instruct (fits comfortably on 8GB VRAM) |
-| Dashboard | Planned -- Phase 5 |
-| Serving infra (stretch) | Triton Inference Server + vLLM backend -- Phase 6 |
-
----
-
-## Project Structure
-
-```
-velocityllm/
-├── scheduler_engine/
-│   ├── server.py               Unified FastAPI server; --policy static|dynamic
-│   ├── policy.py                SchedulerPolicy ABC, StaticBatchPolicy, DynamicBatchPolicy
-│   ├── admission.py             SLA-aware admission controller, burst shedding
-│   ├── adaptive_controller.py   AIMD adaptive concurrency controller
-│   ├── priority_queue.py        Prioritized queue with anti-starvation aging
-│   ├── backend.py               VLLMBackend / MockBackend abstraction
-│   ├── validation.py            Input sanitization & bounds checking
-│   ├── logging_config.py        Structured JSON logging + correlation IDs
-│   ├── types.py                 Pydantic/dataclass schemas, ServerConfig
-│   ├── gpu_monitor.py            Background GPU sampler (used by load generator)
-│   └── gpu_watch.py              Standalone live GPU terminal monitor
-├── load_generator/
-│   ├── generate_load.py         Async load generator (flood/constant/poisson/burst)
-│   ├── traffic_patterns.py      Arrival-time generators + mixed short/long prompt sets
-│   └── compare_results.py       Static vs dynamic side-by-side comparison report
-├── tests/                       29 tests: admission, adaptive controller, priority
-│                                 queue, policies, API integration, robustness/edge cases
-├── docs/                        PRD, implementation plan, benchmark results summary
-├── results/                     Raw CSV + summary JSON from every benchmark run
-├── models/                      Downloaded model weights (gitignored)
-├── verify_phase2.py             Standalone Phase 2 demonstration script
-├── verify_phase3.py             Standalone Phase 3 demonstration script
-├── run_tests.py                 Test suite runner
-├── pytest.ini                   asyncio_mode = auto
-├── requirements.txt
-└── README.md
-```
 
 ---
 
 ## Prerequisites
 
-- Windows 11 with **WSL2 (Ubuntu)** installed, or native Linux
-- NVIDIA GPU with a recent driver (`nvidia-smi` must work inside WSL2)
-- Python 3.11+ (see [Troubleshooting](#troubleshooting--common-fixes) for Python 3.14 caveats)
-- A [Hugging Face](https://huggingface.co) account and access token
+| Requirement | Notes |
+|---|---|
+| OS | Linux, or Windows 11 with WSL2 (Ubuntu). Run every command below inside the Linux shell |
+| GPU | NVIDIA GPU with 8 GB or more VRAM and a current driver. `nvidia-smi` must print your GPU |
+| Python | 3.11 or newer, with `venv` and `pip` |
+| Node.js | 20 or newer with `npm`, only for the Velocity Arena web page |
+| Git | To clone the repository and select the branch |
+| Hugging Face | A free account and access token, to download the model |
+
+Check them first:
+
+```bash
+nvidia-smi
+python3 --version
+node --version
+git --version
+```
 
 ---
 
-## Setup Guide
+## Setup
 
-### 1. Clone and Enter the Project
+All work happens on the **`round-1`** branch, which is the default branch of this repository.
+
+### 1. Clone the `round-1` branch
 
 ```bash
-git clone https://github.com/kartikpagariya25/VelocityLLM.git
+git clone --branch round-1 https://github.com/kartikpagariya25/VelocityLLM.git
 cd VelocityLLM
+git branch --show-current
 ```
 
-### 2. Create and Activate a Virtual Environment
+The last command must print `round-1`. If you already have a clone, switch with:
+
+```bash
+git fetch origin
+git checkout round-1
+git pull origin round-1
+```
+
+### 2. Install system packages
+
+```bash
+sudo apt update
+sudo apt install -y build-essential python3-dev python3-venv
+```
+
+### 3. Create the virtual environment
 
 ```bash
 python3 -m venv .venv
@@ -209,7 +111,7 @@ source .venv/bin/activate
 pip install --upgrade pip
 ```
 
-### 3. Fix pip's Temp Directory (WSL2 Only)
+On WSL2, point pip's temp files at the real filesystem first, otherwise large installs fail with `No space left on device`:
 
 ```bash
 mkdir -p ~/tmp_pip
@@ -217,25 +119,18 @@ echo 'export TMPDIR=$HOME/tmp_pip' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-### 4. Install System Dependencies
-
-```bash
-sudo apt update
-sudo apt install build-essential python3-dev -y
-```
-
-### 5. Install Python Dependencies
+### 4. Install Python dependencies
 
 ```bash
 pip install -r requirements.txt
+pip install "huggingface-hub>=1.5.0,<2.0"
 ```
 
-> Required WSL2/Blackwell-GPU environment variables (`VLLM_USE_V2_MODEL_RUNNER=0`, `VLLM_USE_FLASHINFER_SAMPLER=0`) are set automatically at import time inside `scheduler_engine/backend.py` -- no manual shell configuration needed.
+Keep `huggingface-hub` below 2.0. A newer version is rejected by `transformers`, which vLLM imports, and the engine will not start.
 
-### 6. Hugging Face Authentication & Model Download
+### 5. Download a model
 
 ```bash
-pip install "huggingface-hub>=1.5.0,<2.0"
 hf auth login
 mkdir -p models
 hf download meta-llama/Llama-3.2-1B-Instruct \
@@ -243,90 +138,105 @@ hf download meta-llama/Llama-3.2-1B-Instruct \
   --exclude "original/*"
 ```
 
-> Keep `huggingface-hub` below 2.0 (the pin above): `transformers`, which vLLM imports, rejects newer versions and the engine fails to start. Quantized models such as `Qwen/Qwen2.5-3B-Instruct-AWQ` download the same way and need no code changes.
+Llama is a gated model, so request access on its [model page](https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct) first. To start right away, use a model that needs no approval, for example `Qwen/Qwen2.5-1.5B-Instruct`, downloaded to `models/qwen2.5-1.5b`. The scheduler works with any vLLM-supported model.
 
-> Gated model -- request access on its [model page](https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct) first. To skip waiting, substitute a non-gated equivalent like `Qwen/Qwen2.5-1.5B-Instruct` -- the scheduler is model-agnostic.
-
-### 7. Run the Test Suite (Verifies Everything Works, No GPU Required)
+### 6. Build the Arena web page
 
 ```bash
-python3 run_tests.py
+cd frontend
+npm ci
+npm run build
+cd ..
 ```
-
-All 29 tests should pass using `MockBackend` -- no GPU or model download needed for this step.
 
 ---
 
-## Usage
+## Run the Project
 
-### Start the Server
+Run these from the project folder with the virtual environment active (`source .venv/bin/activate`).
+
+### Option A: Velocity Arena (recommended)
+
+The control service starts the scheduler engines for you and serves the Arena page.
 
 ```bash
-# Dynamic scheduler (the novel contribution)
-python3 -m scheduler_engine.server --policy dynamic --sla-ms 8000
-
-# Static baseline (for comparison)
-python3 -m scheduler_engine.server --policy static
-
-# CPU-only / no-GPU dev mode
-python3 -m scheduler_engine.server --policy dynamic --mock
-
-# Hugging Face Transformers runner (per-sequence KV cache) instead of vLLM
-python3 -m scheduler_engine.server --policy dynamic --runner hf --model-path /path/to/model
-
-# One command: install, test, run the simulated sweeps
-./run_project.sh all
+python3 -m control_service --model llama=models/llama-3.2-1b
 ```
 
-Key flags: `--port`, `--sla-ms` (target SLA in milliseconds), `--max-concurrency`, `--burst-shed-ratio`, `--structured-logs`.
+Open **http://localhost:9000/#/lab**, choose **PC GPU (this machine)** as the data source and press **Run comparison**. The page runs the Static and Dynamic schedulers on identical traffic and shows live tiles, a request timeline, the execution log, and a verdict. Use **Run pressure test** to repeat the comparison at growing load.
 
-### Send a Request
+Add more models by repeating `--model NAME=PATH`, or put model folders (each with a `config.json`) inside `models/`. To reach the service from another machine, add `--host 0.0.0.0 --cors-origin '*'`.
+
+### Option B: Scheduler server only
 
 ```bash
+# Dynamic scheduler
+python3 -m scheduler_engine.server --policy dynamic --model-path models/llama-3.2-1b --sla-ms 8000
+
+# Static baseline, for comparison
+python3 -m scheduler_engine.server --policy static --model-path models/llama-3.2-1b
+```
+
+The server listens on port 8000. Key flags: `--port`, `--sla-ms`, `--max-concurrency`, `--burst-shed-ratio`, `--structured-logs`.
+
+### Helper script
+
+`run_project.sh` wraps the common steps:
+
+```bash
+./run_project.sh setup     # create .venv and install Python dependencies
+./run_project.sh test      # run the test suite
+MODEL_PATH=models/llama-3.2-1b ./run_project.sh serve   # start the scheduler server
+./run_project.sh web       # build and preview the Arena page on port 4173
+```
+
+---
+
+## Test the Project
+
+### 1. Automated tests
+
+```bash
+source .venv/bin/activate
+python3 run_tests.py
+```
+
+Every test should pass. The suite needs no GPU and no model download. To run a single file or test:
+
+```bash
+python3 -m pytest tests/test_admission.py -v
+python3 -m pytest tests -k "priority" -v
+```
+
+### 2. Check the live server
+
+With a scheduler server running (Option B), in a second terminal:
+
+```bash
+curl http://localhost:8000/health
+
 curl -X POST http://localhost:8000/generate \
   -H "Content-Type: application/json" \
   -d '{"prompt": "What is the capital of France?", "max_tokens": 50}'
+
+curl http://localhost:8000/stats
+curl http://localhost:8000/metrics
 ```
 
-### Check Live Telemetry
+`/health` reports readiness, `/stats` returns scheduler telemetry as JSON, and `/metrics` is in Prometheus format.
+
+### 3. Load test from the command line
 
 ```bash
-curl http://localhost:8000/stats     # JSON scheduler telemetry
-curl http://localhost:8000/metrics   # Prometheus-format metrics
-curl http://localhost:8000/health    # Liveness/readiness
-```
-
-### Run a Benchmark
-
-```bash
-# Simple saturation test
 python3 load_generator/generate_load.py \
   --url http://localhost:8000/generate \
   --num-requests 30 --concurrency 10 --max-tokens 100 \
-  --output results/run.csv --label "My Run"
-
-# Realistic Poisson traffic over 10 seconds
-python3 load_generator/generate_load.py \
-  --url http://localhost:8000/generate \
-  --num-requests 40 --concurrency 10 --pattern poisson --duration 10 \
-  --output results/poisson.csv --label "Poisson Traffic"
-
-# Bursty traffic
-python3 load_generator/generate_load.py \
-  --url http://localhost:8000/generate \
-  --num-requests 40 --concurrency 15 --pattern burst --duration 15 \
-  --output results/burst.csv --label "Burst Traffic"
-
-# Mixed short/long prompts (head-of-line blocking test)
-python3 load_generator/generate_load.py \
-  --url http://localhost:8000/generate \
-  --num-requests 30 --concurrency 10 --mixed-prompts \
-  --output results/mixed.csv --label "Mixed Prompts"
+  --output results/dynamic_run.csv --label "Dynamic"
 ```
 
-Each run prints a clean, highlighted report and saves raw data (`*.csv`) plus a machine-readable summary (`*_summary.json`).
+Other traffic shapes: `--pattern poisson --duration 10`, `--pattern burst --duration 15`, and `--mixed-prompts` for short and long prompts together. Each run prints a summary and saves a CSV plus a `*_summary.json`.
 
-### Compare Static vs Dynamic
+To compare the schedulers, start the server once with `--policy static` and once with `--policy dynamic`, run the same load against each (saving to `results/static_run.csv` and `results/dynamic_run.csv`), then:
 
 ```bash
 python3 load_generator/compare_results.py \
@@ -334,45 +244,9 @@ python3 load_generator/compare_results.py \
   --dynamic results/dynamic_run_summary.json
 ```
 
-### Request-Rate Sweep and Server Comparison
+### 4. Test the Arena
 
-```bash
-# Static cap vs true static batching vs dynamic, on the simulated backend (no GPU)
-python3 tools/rate_sweep.py --mock --policies static,static-batch,dynamic --rps 1,2,4,8,16
-
-# Scheduling order and batch token budget on the dynamic engine
-python3 tools/rate_sweep.py --mock --policies dynamic:fcfs,dynamic:sjf,dynamic:priority
-python3 -m scheduler_engine.server --policy dynamic --max-batch-tokens 2048 --queue-order sjf
-
-# Against a vLLM server and Triton Inference Server
-python3 tools/rate_sweep.py --policies dynamic --target vllm=openai@http://localhost:8001#MODEL
-```
-
-The sweep replays one seeded Poisson workload per rate, then writes `sweep_summary.csv/json`, raw per-request CSVs, `throughput_latency_curves.png` and a capacity table (highest offered rate whose p99 stays within the SLA). Every response also carries `ttft_seconds` and `per_token_latency_ms`; `/stats` reports TTFT percentiles and goodput. See [`docs/COMPARISON.md`](docs/COMPARISON.md).
-
-| Flag | Meaning |
-|---|---|
-| `--policy static-batch` | Wait for N requests (`--initial-concurrency`) or `--static-batch-timeout-ms`, run the batch to completion, release all results together |
-| `--queue-order fcfs / sjf / priority` | Order in which the dynamic scheduler admits waiting requests |
-| `--max-batch-tokens N` | Token budget across in-flight requests (prompt, generation budget and image tokens) |
-| `--chunked-prefill`, `--max-num-batched-tokens N` | vLLM chunked prefill |
-| `--mock-tps`, `--mock-contention` | Speed and batch-scaling curve of the simulated backend |
-
----
-
-## Benchmark Results
-
-**Model:** Llama-3.2-1B-Instruct · **Hardware:** RTX 5050 (8GB VRAM) · Full methodology in [`docs/baseline_results_summary.md`](docs/baseline_results_summary.md)
-
-| Scenario | Metric | Static | Dynamic | Result |
-|---|---|---|---|---|
-| Saturation load (30 req, flood) | Throughput | 7.07 req/s | **8.11 req/s** | **+14.7%** |
-| | p99 latency | 4.241s | **3.198s** | **-24.6%** |
-| Poisson traffic (light load) | Throughput / p99 | 4.15 req/s / 0.835s | 4.10 req/s / 0.829s | Equivalent (expected -- no contention) |
-| Bursty traffic | Throughput / p99 | 1.11 req/s / 0.693s | 1.11 req/s / 0.743s | Equivalent (expected -- no contention) |
-| **Mixed short/long prompts** | **SLA compliance** | **80.0%** | **100.0%** | **Dynamic never breaks SLA promises** |
-
-**The headline finding:** under mixed realistic load, the static baseline let 20% of requests silently breach their latency SLA. The dynamic scheduler maintained 100% SLA compliance by proactively shedding only 3.3% of requests (an honest, immediate HTTP 429) rather than letting everyone's latency degrade unpredictably -- at nearly identical throughput (5.13 vs 5.08 req/s).
+Run Option A, open **http://localhost:9000/#/lab**, press **Run comparison**, and confirm that both panels fill with requests and a verdict appears. The preflight panel on the page tells you if a GPU or model is missing.
 
 ---
 
@@ -407,42 +281,6 @@ The sweep replays one seeded Poisson workload per rate, then writes `sweep_summa
 
 ---
 
-## Roadmap
-
-- [x] **Phase 0** -- Environment, GPU/CUDA/vLLM verified end-to-end
-- [x] **Phase 1** -- Baseline static-batching server, load generator, GPU monitoring
-- [x] **Phase 2** -- Core dynamic scheduler: SLA-aware admission control, adaptive AIMD batch sizing, priority queue with anti-starvation aging
-- [x] **Phase 3** -- Robustness: input validation, GPU memory limits, OOM recovery, client-disconnect reclamation, burst shedding, structured logging -- 29/29 tests passing
-- [x] **Phase 4** -- Advanced load generation (Poisson/burst/mixed-prompt patterns) and full comparative benchmarking -- real, reproducible static vs dynamic data captured
-- [ ] **Phase 5** -- Live dashboard with static-vs-dynamic comparison view
-- [x] **Phase 6** -- Request-rate sweep, TTFT/goodput metrics, true static batching, FCFS/SJF/priority ordering, batch token budget, vLLM and Triton comparison harnesses, technical report (GPU comparison runs still to record)
-- [ ] **Phase 7** -- Demo rehearsal and presentation
-
-Full detail: [`docs/VelocityLLM_Implementation_Plan.md`](docs/VelocityLLM_Implementation_Plan.md)
-
----
-
-## Documentation
-
-| Document | Description |
-|---|---|
-| [`docs/VelocityLLM_PRD.md`](docs/VelocityLLM_PRD.md) | Full product requirements -- goals, edge cases, test plan, KPIs |
-| [`docs/VelocityLLM_Implementation_Plan.md`](docs/VelocityLLM_Implementation_Plan.md) | Phased execution plan with exit criteria |
-| [`docs/Project1_Compliance.md`](docs/Project1_Compliance.md) | Requirement-by-requirement check against the Project 1 guide, with status and deviations |
-| [`docs/COMPARISON.md`](docs/COMPARISON.md) | How to run the sweep against vLLM and Triton and read the results |
-| [`docs/TECHNICAL_REPORT.md`](docs/TECHNICAL_REPORT.md) | Method, simulated sweep results and what remains to measure on the GPU |
-| [`docs/baseline_results_summary.md`](docs/baseline_results_summary.md) | Full benchmark methodology, results, and root-cause log for every issue found during testing |
-
----
-
-## Team
-
-**Kartik R. Pagariya** -- Scheduler architecture, infrastructure, benchmarking, testing
-**Vikrant Kadam** -- Phase 2/3 scheduler engine implementation
-B.Tech, Artificial Intelligence and Data Science -- Vishwakarma Institute of Technology, Pune
-GitHub: [@kartikpagariya25](https://github.com/kartikpagariya25)
-
----
 
 <div align="center">
 
