@@ -38,6 +38,23 @@ This project builds a **dynamic/continuous batching scheduler** on top of [vLLM]
 
 ---
 
+## Demo
+
+[![VelocityLLM, 90 second walkthrough](docs/media/demo-poster.jpg)](docs/media/velocityllm-demo.mp4)
+
+A 90 second walkthrough: the static batch problem, the controller, and the measured sweep on an RTX 5050 laptop GPU. Slides: [PDF](docs/presentation/VelocityLLM.pdf) · [PPTX](docs/presentation/VelocityLLM.pptx).
+
+### The batch governor
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/media/batch-governor-light.svg">
+  <img src="docs/media/batch-governor-dark.svg" alt="Isometric bench rig: a 32-slot tray, a sliding shutter that sets the concurrency limit, a rack and spring, and a dial gauge with a red SLA zone" width="100%">
+</picture>
+
+The tray holds up to 32 requests and the shutter decides how many slots are open. While requests wait and p99 has room, the shutter steps out by 1, then 2, then 4. When p99 crosses the SLA, or memory passes 94%, the spring pulls it back to three quarters of where it was. This is a model of the controller rule, not a measurement. Open [the interactive version](docs/media/batch-governor.html) in a browser and move the pointer across it to change the load.
+
+---
+
 ## Problem Statement
 
 | | |
