@@ -42,7 +42,7 @@ This project builds a **dynamic/continuous batching scheduler** on top of [vLLM]
 
 [![VelocityLLM, voiced walkthrough](docs/media/demo-poster.jpg)](docs/media/velocityllm-demo.mp4)
 
-A voiced walkthrough (about 6.5 minutes, English narration with an on-screen pointer): the static batch problem, the controller explained as a kitchen, a live tour of the Velocity Arena, and the measured sweep on an RTX 5050 laptop GPU. Slides: [PDF](docs/presentation/VelocityLLM.pdf) · [PPTX](docs/presentation/VelocityLLM.pptx).
+A voiced walkthrough (about 6.75 minutes, English narration with an on-screen pointer): the static batch problem, the controller explained as a kitchen, a live tour of the Velocity Arena, and the measured sweep on an RTX 5050 laptop GPU. Slides: [PDF](docs/presentation/VelocityLLM.pdf) · [PPTX](docs/presentation/VelocityLLM.pptx).
 
 ### The batch governor
 
