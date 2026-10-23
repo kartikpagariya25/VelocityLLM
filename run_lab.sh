@@ -91,7 +91,10 @@ bench() {
 mock() {
   head_ "Mock Arena (no GPU, pipeline check only)"
   activate
-  exec python -m control_service --mock --port "$PORT"
+  ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+  printf "  Local : %shttp://localhost:%s/#/lab%s\n" "$B" "$PORT" "$N"
+  [ -n "${ip:-}" ] && printf "  WSL/LAN: %shttp://%s:%s/#/lab%s\n\n" "$B" "$ip" "$PORT" "$N"
+  exec python -m control_service --mock --host 0.0.0.0 --port "$PORT" --cors-origin '*'
 }
 
 all() { setup; model; tests; serve; }
